@@ -16,8 +16,8 @@ from django.http import JsonResponse
 from django.contrib.auth import authenticate
 from django.views.decorators.csrf import csrf_exempt
 from django.shortcuts import render, get_object_or_404
-from django.views.decorators.http import require_GET
-from .models import User, CEO, HR, Manager, Employee, Attendance, Admin, Leave, Payroll
+from django.views.decorators.http import require_GET, require_POST
+from .models import User, CEO, HR, Manager, Employee, Attendance, Admin, Leave, Payroll, TaskTable
 from .serializers import UserSerializer, CEOSerializer, HRSerializer, ManagerSerializer, EmployeeSerializer, SuperUserCreateSerializer, UserRegistrationSerializer, AdminSerializer
 
 class SignupView(APIView):
@@ -117,7 +117,7 @@ def get_email_by_username(username):
             full_name_lower = obj.fullname.lower()
             if any(part.startswith(username) for part in full_name_lower.split()):
                 email = obj.email.email
-                print(f"[get_email_by_username] Found email {email} for username {username} in {model._name_}")
+                print(f"[get_email_by_username] Found email {email} for username {username} in {model.fullname}")
                 return email
     print(f"[get_email_by_username] No email found for username {username}")
     return None
@@ -139,40 +139,47 @@ def is_email_exists(email):
 # =====================
 # Mark attendance by email
 # =====================
+from django.utils import timezone
+import pytz
+from .models import Attendance, User
+
+IST = pytz.timezone("Asia/Kolkata")
+
 def mark_attendance_by_email(email_str):
     if not is_email_exists(email_str):
-        print(f"[mark_attendance_by_email] Email {email_str} not found in user models. Attendance not marked.")
+        print(f"[mark_attendance_by_email] Email {email_str} not found. Attendance not marked.")
         return None
 
     today = timezone.localdate()
-    now_time = timezone.localtime().time()
-    print(f"[mark_attendance_by_email] Processing attendance for {email_str} on {today} at {now_time}")
+    now = timezone.now().astimezone(IST)   # force IST
+    print(f"[mark_attendance_by_email] Processing attendance for {email_str} on {today} at {now}")
 
     try:
         user_instance = User.objects.get(email=email_str)
     except User.DoesNotExist:
-        print(f"[mark_attendance_by_email] User instance not found for email {email_str}")
+        print(f"[mark_attendance_by_email] User instance not found for {email_str}")
         return None
 
     try:
-        attendance = Attendance.objects.get(email=user_instance)
+        attendance = Attendance.objects.get(email=user_instance, date=today)
         if attendance.check_out is None:
-            attendance.check_out = now_time
+            attendance.check_out = now
             attendance.save()
-            print(f"[mark_attendance_by_email] Updated check_out for {email_str} at {now_time}")
+            print(f"[mark_attendance_by_email] Updated check_out for {email_str} at {now}")
     except Attendance.DoesNotExist:
         try:
             attendance = Attendance.objects.create(
-                email=user_instance,  # email is PK
+                email=user_instance,
                 date=today,
-                check_in=now_time
+                check_in=now
             )
-            print(f"[mark_attendance_by_email] Created new attendance record for {email_str} at {now_time}")
+            print(f"[mark_attendance_by_email] Created new attendance record for {email_str} at {now}")
         except Exception as e:
             print(f"[mark_attendance_by_email ERROR] Failed to save attendance for {email_str}: {e}")
             return None
 
     return attendance
+
 
 # =====================
 # Render face recognition page
@@ -592,3 +599,192 @@ def list_payrolls(request):
         })
 
     return JsonResponse({"payrolls": result}, status=200)
+
+from django.http import JsonResponse
+from django.views.decorators.http import require_GET, require_http_methods
+from .models import TaskTable, User
+import json
+
+# ----------------------------
+# List all tasks
+# ----------------------------
+@require_GET
+def list_tasks(request):
+    tasks = TaskTable.objects.all().order_by('-created_at')
+    result = []
+
+    for task in tasks:
+        result.append({
+            "task_id": task.task_id,
+            "title": task.title,
+            "description": task.description,
+            "email": task.email.email,
+            "assigned_by": task.assigned_by.email if task.assigned_by else None,
+            "department": task.department,
+            "priority": task.priority,
+            "status": task.status,
+            "start_date": str(task.start_date),
+            "due_date": str(task.due_date) if task.due_date else None,
+            "completed_date": str(task.completed_date) if task.completed_date else None,
+            "created_at": str(task.created_at),
+            "updated_at": str(task.updated_at),
+        })
+
+    return JsonResponse({"tasks": result}, status=200)
+
+
+# ----------------------------
+# Get single task by id
+# ----------------------------
+@require_GET
+def get_task(request, task_id):
+    try:
+        task = TaskTable.objects.get(pk=task_id)
+        data = {
+            "task_id": task.task_id,
+            "title": task.title,
+            "description": task.description,
+            "email": task.email.email,
+            "assigned_by": task.assigned_by.email if task.assigned_by else None,
+            "department": task.department,
+            "priority": task.priority,
+            "status": task.status,
+            "start_date": str(task.start_date),
+            "due_date": str(task.due_date) if task.due_date else None,
+            "completed_date": str(task.completed_date) if task.completed_date else None,
+            "created_at": str(task.created_at),
+            "updated_at": str(task.updated_at),
+        }
+        return JsonResponse(data, status=200)
+    except TaskTable.DoesNotExist:
+        return JsonResponse({"error": "Task not found"}, status=404)
+
+
+# ----------------------------
+# Update task by id
+# ----------------------------
+@require_http_methods(["PUT"])
+def update_task(request, task_id):
+    try:
+        task = TaskTable.objects.get(pk=task_id)
+        body = json.loads(request.body)
+
+        # update fields if provided
+        for field in ['title', 'description', 'department', 'priority', 'status', 'start_date', 'due_date', 'completed_date']:
+            if field in body:
+                setattr(task, field, body[field])
+
+        if 'email' in body:
+            try:
+                task.email = User.objects.get(email=body['email'])
+            except User.DoesNotExist:
+                return JsonResponse({"error": "User not found"}, status=404)
+
+        if 'assigned_by' in body:
+            try:
+                task.assigned_by = User.objects.get(email=body['assigned_by'])
+            except User.DoesNotExist:
+                task.assigned_by = None  # optional
+
+        task.save()
+        return JsonResponse({"message": "Task updated successfully"}, status=200)
+    except TaskTable.DoesNotExist:
+        return JsonResponse({"error": "Task not found"}, status=404)
+
+
+# ----------------------------
+# Delete task by id
+# ----------------------------
+@require_http_methods(["DELETE"])
+def delete_task(request, task_id):
+    try:
+        task = TaskTable.objects.get(pk=task_id)
+        task.delete()
+        return JsonResponse({"message": "Task deleted successfully"}, status=200)
+    except TaskTable.DoesNotExist:
+        return JsonResponse({"error": "Task not found"}, status=404)
+    
+from django.views.decorators.http import require_POST
+from django.http import JsonResponse
+from django.utils import timezone
+import json
+from .models import TaskTable, User
+
+@require_POST
+def create_task(request):
+    """Create a new task"""
+    try:
+        data = json.loads(request.body)
+
+        email = data.get("email")
+        assigned_by_email = data.get("assigned_by")
+        title = data.get("title")
+        description = data.get("description", "")
+        department = data.get("department", "")
+        priority = data.get("priority", "Medium")
+        status = data.get("status", "Pending")
+        start_date = data.get("start_date", str(timezone.localdate()))
+        due_date = data.get("due_date", None)
+
+        # Validate required fields
+        if not email or not title:
+            return JsonResponse({"error": "email and title are required"}, status=400)
+
+        # Get user objects
+        user = User.objects.filter(email=email).first()
+        assigned_by_user = User.objects.filter(email=assigned_by_email).first() if assigned_by_email else None
+
+        if not user:
+            return JsonResponse({"error": "User not found"}, status=404)
+
+        # Create task
+        task = TaskTable.objects.create(
+            email=user,
+            assigned_by=assigned_by_user,
+            title=title,
+            description=description,
+            department=department,
+            priority=priority,
+            status=status,
+            start_date=start_date,
+            due_date=due_date
+        )
+
+        return JsonResponse({
+            "message": "Task created successfully",
+            "task_id": task.task_id,
+            "title": task.title,
+            "email": task.email.email,
+            "status": task.status
+        }, status=201)
+
+    except Exception as e:
+        return JsonResponse({"error": str(e)}, status=500)
+
+
+
+from rest_framework import generics
+from .serializers import RegisterSerializer
+from .models import User
+
+class RegisterView(generics.CreateAPIView):
+    queryset = User.objects.all()
+    serializer_class = RegisterSerializer
+
+
+@require_GET
+def list_attendance(request):
+    """List all attendance records"""
+    attendance_records = Attendance.objects.all().order_by('-date')
+
+    result = []
+    for record in attendance_records:
+        result.append({
+            "email": record.email.email,
+            "role": record.email.role,
+            "date": str(record.date),
+            "check_in": str(record.check_in) if record.check_in else None,
+            "check_out": str(record.check_out) if record.check_out else None,
+        })
+
+    return JsonResponse({"attendance": result}, status=200)

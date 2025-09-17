@@ -84,3 +84,27 @@ class LeaveSerializer(serializers.ModelSerializer):
         model = Leave
         fields = '__all__'
         read_only_fields = ['status', 'applied_on']   # status set to Pending automatically
+
+from rest_framework import serializers
+from .models import Attendance
+
+class AttendanceSerializer(serializers.ModelSerializer):
+    email = serializers.StringRelatedField()  # shows the user's email
+
+    class Meta:
+        model = Attendance
+        fields = ['email', 'date', 'check_in', 'check_out']
+
+class RegisterSerializer(serializers.ModelSerializer):
+    password = serializers.CharField(write_only=True)
+
+    class Meta:
+        model = User
+        fields = ["email", "password", "role"]
+
+    def create(self, validated_data):
+        password = validated_data.pop("password")
+        user = User(**validated_data)
+        user.set_password(password)
+        user.save()
+        return user

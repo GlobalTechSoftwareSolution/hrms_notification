@@ -202,3 +202,69 @@ class Payroll(models.Model):
         # Calculate net salary automatically
         self.net_salary = (self.basic_salary + self.allowances + self.bonus) - (self.deductions + self.tax)
         super().save(*args, **kwargs)
+
+from django.db import models
+from django.utils import timezone
+from accounts.models import User  # make sure to import your custom User model
+
+class TaskTable(models.Model):
+    task_id = models.AutoField(primary_key=True)  # unique ID for each task
+    
+    # Link each task to a user (by email, not id)
+    email = models.ForeignKey(
+        User, 
+        on_delete=models.CASCADE, 
+        to_field='email', 
+        related_name="tasks"
+    )
+
+    title = models.CharField(max_length=255)
+    description = models.TextField(null=True, blank=True)
+
+    # Who assigned this task (HR, Manager, CEO, Admin, etc.)
+    assigned_by = models.ForeignKey(
+        User, 
+        on_delete=models.SET_NULL, 
+        null=True, 
+        blank=True,
+        related_name="tasks_assigned"
+    )
+
+    department = models.CharField(max_length=100, null=True, blank=True)
+
+    priority = models.CharField(
+        max_length=20, 
+        choices=[
+            ('Low', 'Low'),
+            ('Medium', 'Medium'),
+            ('High', 'High'),
+            ('Critical', 'Critical'),
+        ], 
+        default='Medium'
+    )
+
+    status = models.CharField(
+        max_length=20, 
+        choices=[
+            ('Pending', 'Pending'),
+            ('In Progress', 'In Progress'),
+            ('Completed', 'Completed'),
+            ('On Hold', 'On Hold'),
+        ], 
+        default='Pending'
+    )
+
+    start_date = models.DateField(default=timezone.localdate)
+    due_date = models.DateField(null=True, blank=True)
+    completed_date = models.DateField(null=True, blank=True)
+
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ['-created_at']
+        verbose_name = "Task"
+        verbose_name_plural = "Tasks"
+
+    def __str__(self):
+        return f"Task: {self.title} for {self.email.email} → {self.status}"

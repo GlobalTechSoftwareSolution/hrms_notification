@@ -1,7 +1,11 @@
 from django.urls import path
+from rest_framework_simplejwt.views import (
+    TokenObtainPairView,
+    TokenRefreshView,
+)
 from accounts.views import (LoginView, CreateSuperUserView, SignupView, approve_user, reject_user,
-                             face_recognition_page, recognize_face, today_attendance, 
-                             UserViewSet, EmployeeViewSet, HRViewSet, ManagerViewSet, AdminViewSet, CEOViewSet, apply_leave, update_leave_status, leaves_today, list_leaves, create_payroll, update_payroll_status, get_payroll, list_payrolls)
+                             face_recognition_page, recognize_face, today_attendance, RegisterView, list_attendance,
+                             UserViewSet, EmployeeViewSet, HRViewSet, ManagerViewSet, AdminViewSet, CEOViewSet, apply_leave, update_leave_status, leaves_today, list_leaves, create_payroll, update_payroll_status, get_payroll, list_payrolls, list_tasks, get_task, update_task, delete_task, create_task)
 
 urlpatterns = [
     path('signup/', SignupView.as_view(), name='user-signup'),
@@ -20,6 +24,10 @@ urlpatterns = [
 
     path("attendance/", face_recognition_page, name="face_recognition_page"),
     path("recognize_face/", recognize_face, name="recognize_face"),
+    path("register/", RegisterView.as_view(), name="register"),
+
+    path("token/", TokenObtainPairView.as_view(), name="token_obtain_pair"),
+    path("token/refresh/", TokenRefreshView.as_view(), name="token_refresh"),
 
     path("today_attendance/", today_attendance, name="today_attendance"),
 
@@ -56,4 +64,13 @@ urlpatterns = [
     path('update_payroll/<path:email>/', update_payroll_status, name='update_payroll_status'),
     path('get_payroll/<path:email>/', get_payroll, name='get_payroll'),
     path('list_payrolls/', list_payrolls, name='list_payrolls'),
+
+    path('list_attendance/', list_attendance, name='attendance-list'),
+
+    # List all tasks
+    path('list_tasks/', list_tasks, name='list_tasks'),
+    path('get_task/<int:task_id>/', get_task, name='get_task'),
+    path('create_task/create/', create_task, name='create_task'),
+    path('update_task/<int:task_id>/', update_task, name='update_task'),
+    path('delete_task/<int:task_id>/', delete_task, name='delete_task'),
 ]
