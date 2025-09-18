@@ -285,21 +285,3 @@ class Notice(models.Model):
 
     def __str__(self):
         return self.title
-    
-from django.db import models
-from accounts.models import User  # Use your user model as needed
-
-class Fingerprint(models.Model):
-    id = models.AutoField(primary_key=True)
-    user = models.ForeignKey(User, on_delete=models.CASCADE, to_field='email', related_name='fingerprints')
-    template = models.BinaryField(null=False)  # Stores fingerprint template in binary form
-    image = models.ImageField(upload_to='fingerprints/', null=True, blank=True)  # Optional: store fingerprint image
-    device_serial = models.CharField(max_length=128, null=True, blank=True)  # Device identifier, e.g., Morpho SN
-    registered_at = models.DateTimeField(auto_now_add=True)
-    active = models.BooleanField(default=True)
-
-    class Meta:
-        ordering = ['-registered_at']
-
-    def __str__(self):
-        return f"Fingerprint for {self.user.email} (Active: {self.active})"

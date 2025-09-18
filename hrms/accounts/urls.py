@@ -77,10 +77,3 @@ urlpatterns = [
     path('update_notice/<int:pk>/', update_notice, name='update_notice'),
     path('delete_notice/<int:pk>/', delete_notice, name='delete_notice'),
 ]
-
-from . import views
-urlpatterns += [
-    path('fingerprints/', views.list_fingerprints, name='list_fingerprints'),
-    path('fingerprints/create/', views.create_fingerprint, name='create_fingerprint'),
-    path('fingerprints/<int:pk>/delete/', views.delete_fingerprint, name='delete_fingerprint'),
-]

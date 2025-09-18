@@ -118,10 +118,3 @@ class NoticeSerializer(serializers.ModelSerializer):
         model = Notice
         fields = '__all__'
         
-from rest_framework import serializers
-from .models import Fingerprint
-
-class FingerprintSerializer(serializers.ModelSerializer):
-    class Meta:
-        model = Fingerprint
-        fields = '__all__'
