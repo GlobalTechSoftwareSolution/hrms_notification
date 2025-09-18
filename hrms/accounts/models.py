@@ -141,11 +141,10 @@ class Admin(models.Model):
 
 
 class Attendance(models.Model):
-    email = models.OneToOneField(
+    email = models.ForeignKey(
         User,
         on_delete=models.CASCADE,
         to_field='email',
-        primary_key=True   # email is the only primary key
     )
     date = models.DateField(default=timezone.localdate)
     check_in = models.TimeField(null=True, blank=True)
@@ -153,9 +152,11 @@ class Attendance(models.Model):
 
     class Meta:
         ordering = ['-date']
+        unique_together = ('email', 'date')  # ensures only one record per user per date
 
     def __str__(self):
         return f"{self.email.email} ({self.email.role}) - {self.date}"
+
 
 class Leave(models.Model):
     email = models.OneToOneField(User, on_delete=models.CASCADE, to_field='email', primary_key=True)

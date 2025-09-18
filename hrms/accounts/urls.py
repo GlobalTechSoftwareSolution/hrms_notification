@@ -22,8 +22,8 @@ urlpatterns = [
     path('approve/', approve_user),
     path('reject/', reject_user),
 
-    path("attendance/", face_recognition_page, name="face_recognition_page"),
-    path("recognize_face/", recognize_face, name="recognize_face"),
+    # path("attendance/", face_recognition_page, name="face_recognition_page"),
+    path("attendance/", recognize_face, name="recognize_face"),
     path("register/", RegisterView.as_view(), name="register"),
 
     path("token/", TokenObtainPairView.as_view(), name="token_obtain_pair"),

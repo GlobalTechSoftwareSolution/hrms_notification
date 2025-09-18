@@ -110,6 +110,166 @@ else:
 # =====================
 # Helper: get email by username (partial match)
 # =====================
+# def get_email_by_username(username):
+#     username = username.lower()
+#     for model in [HR, Employee, CEO, Manager, Admin]:
+#         for obj in model.objects.all():
+#             full_name_lower = obj.fullname.lower()
+#             if any(part.startswith(username) for part in full_name_lower.split()):
+#                 email = obj.email.email
+#                 print(f"[get_email_by_username] Found email {email} for username {username} in {model.fullname}")
+#                 return email
+#     print(f"[get_email_by_username] No email found for username {username}")
+#     return None
+
+# # =====================
+# # Check if email exists
+# # =====================
+# def is_email_exists(email):
+#     exists = any([
+#         HR.objects.filter(email=email).exists(),
+#         Employee.objects.filter(email=email).exists(),
+#         CEO.objects.filter(email=email).exists(),
+#         Manager.objects.filter(email=email).exists(),
+#         Admin.objects.filter(email=email).exists()
+#     ])
+#     print(f"[is_email_exists] Email {email} exists: {exists}")
+#     return exists
+
+# # =====================
+# # Mark attendance by email
+# # =====================
+# from django.utils import timezone
+# import pytz
+# from .models import Attendance, User
+
+# IST = pytz.timezone("Asia/Kolkata")
+
+# def mark_attendance_by_email(email_str):
+#     if not is_email_exists(email_str):
+#         print(f"[mark_attendance_by_email] Email {email_str} not found. Attendance not marked.")
+#         return None
+
+#     today = timezone.localdate()
+#     now = timezone.now().astimezone(IST)   # force IST
+#     print(f"[mark_attendance_by_email] Processing attendance for {email_str} on {today} at {now}")
+
+#     try:
+#         user_instance = User.objects.get(email=email_str)
+#     except User.DoesNotExist:
+#         print(f"[mark_attendance_by_email] User instance not found for {email_str}")
+#         return None
+
+#     try:
+#         attendance = Attendance.objects.get(email=user_instance, date=today)
+#         if attendance.check_out is None:
+#             attendance.check_out = now
+#             attendance.save()
+#             print(f"[mark_attendance_by_email] Updated check_out for {email_str} at {now}")
+#     except Attendance.DoesNotExist:
+#         try:
+#             attendance = Attendance.objects.create(
+#                 email=user_instance,
+#                 date=today,
+#                 check_in=now
+#             )
+#             print(f"[mark_attendance_by_email] Created new attendance record for {email_str} at {now}")
+#         except Exception as e:
+#             print(f"[mark_attendance_by_email ERROR] Failed to save attendance for {email_str}: {e}")
+#             return None
+
+#     return attendance
+
+
+# # =====================
+# # Render face recognition page
+# # =====================
+# def face_recognition_page(request):
+#     return render(request, "face_recognition.html")
+
+# # =====================
+# # Face recognition API
+# # =====================
+# @csrf_exempt
+# def recognize_face(request):
+#     if request.method != "POST":
+#         return JsonResponse({"error": "Invalid method"}, status=405)
+
+#     try:
+#         data = json.loads(request.body)
+#         image_data = data.get("image", "")
+#         if not image_data:
+#             return JsonResponse({"error": "No image data provided"}, status=400)
+
+#         image_data = image_data.split(",")[1]  # Remove base64 header
+#         image_bytes = base64.b64decode(image_data)
+#         img = Image.open(BytesIO(image_bytes)).convert('RGB')
+#         img_np = np.array(img)
+#     except Exception as e:
+#         return JsonResponse({"error": f"Failed to process image: {e}"}, status=400)
+
+#     face_encodings = face_recognition.face_encodings(img_np)
+
+#     username = "No face detected"
+#     email = None
+#     confidence = 0
+#     attendance = None
+
+#     if face_encodings:
+#         face_encoding = face_encodings[0]
+#         distances = face_recognition.face_distance(known_face_encodings, face_encoding)
+#         best_match_index = np.argmin(distances)
+#         best_distance = distances[best_match_index]
+
+#         if best_distance < 0.6:
+#             username = known_face_names[best_match_index]
+#             email = get_email_by_username(username)
+#             confidence = round((1 - best_distance) * 100, 2)
+#         else:
+#             username = "Unknown"
+#             email = None
+
+#     print(f"[recognize_face] Username: {username}, Email: {email}, Confidence: {confidence}%")
+
+#     if email:
+#         attendance = mark_attendance_by_email(email)
+#     else:
+#         print("[recognize_face] No valid email found; attendance not marked.")
+
+#     return JsonResponse({
+#         "username": username,
+#         "email": email,
+#         "confidence": f"{confidence}%" if email else "",
+#         "check_in": str(attendance.check_in) if attendance else "",
+#         "check_out": str(attendance.check_out) if attendance else ""
+#     })
+
+
+import json
+import base64
+import numpy as np
+from io import BytesIO
+from PIL import Image
+from django.utils import timezone
+from django.views.decorators.csrf import csrf_exempt
+from django.http import JsonResponse
+import face_recognition
+import pytz
+
+from .models import Attendance, User, HR, Employee, CEO, Manager, Admin
+
+# =====================
+# Constants
+# =====================
+IST = pytz.timezone("Asia/Kolkata")
+
+# Load known faces somewhere globally
+# known_face_encodings = [...]
+# known_face_names = [...]
+
+# =====================
+# Helper Functions
+# =====================
 def get_email_by_username(username):
     username = username.lower()
     for model in [HR, Employee, CEO, Manager, Admin]:
@@ -117,14 +277,11 @@ def get_email_by_username(username):
             full_name_lower = obj.fullname.lower()
             if any(part.startswith(username) for part in full_name_lower.split()):
                 email = obj.email.email
-                print(f"[get_email_by_username] Found email {email} for username {username} in {model.fullname}")
+                print(f"[get_email_by_username] Found email {email} for username {username} in {model.__name__}")
                 return email
     print(f"[get_email_by_username] No email found for username {username}")
     return None
 
-# =====================
-# Check if email exists
-# =====================
 def is_email_exists(email):
     exists = any([
         HR.objects.filter(email=email).exists(),
@@ -136,23 +293,14 @@ def is_email_exists(email):
     print(f"[is_email_exists] Email {email} exists: {exists}")
     return exists
 
-# =====================
-# Mark attendance by email
-# =====================
-from django.utils import timezone
-import pytz
-from .models import Attendance, User
-
-IST = pytz.timezone("Asia/Kolkata")
-
-def mark_attendance_by_email(email_str):
+def mark_attendance_by_email(email_str, action="checkin"):
     if not is_email_exists(email_str):
         print(f"[mark_attendance_by_email] Email {email_str} not found. Attendance not marked.")
         return None
 
     today = timezone.localdate()
-    now = timezone.now().astimezone(IST)   # force IST
-    print(f"[mark_attendance_by_email] Processing attendance for {email_str} on {today} at {now}")
+    now = timezone.now().astimezone(IST)
+    print(f"[mark_attendance_by_email] Processing attendance for {email_str} on {today} at {now} (action: {action})")
 
     try:
         user_instance = User.objects.get(email=email_str)
@@ -160,35 +308,34 @@ def mark_attendance_by_email(email_str):
         print(f"[mark_attendance_by_email] User instance not found for {email_str}")
         return None
 
-    try:
-        attendance = Attendance.objects.get(email=user_instance, date=today)
+    attendance, created = Attendance.objects.get_or_create(
+        email=user_instance,
+        date=today,
+        defaults={"check_in": None, "check_out": None}
+    )
+
+    if action == "checkin":
+        if attendance.check_in is None:
+            attendance.check_in = now
+            attendance.save()
+            print(f"[mark_attendance_by_email] Checked in {email_str} at {now}")
+        else:
+            print(f"[mark_attendance_by_email] Already checked in {email_str}")
+    elif action == "checkout":
+        if attendance.check_in is None:
+            print(f"[mark_attendance_by_email] Cannot checkout without check-in for {email_str}")
+            return None
         if attendance.check_out is None:
             attendance.check_out = now
             attendance.save()
-            print(f"[mark_attendance_by_email] Updated check_out for {email_str} at {now}")
-    except Attendance.DoesNotExist:
-        try:
-            attendance = Attendance.objects.create(
-                email=user_instance,
-                date=today,
-                check_in=now
-            )
-            print(f"[mark_attendance_by_email] Created new attendance record for {email_str} at {now}")
-        except Exception as e:
-            print(f"[mark_attendance_by_email ERROR] Failed to save attendance for {email_str}: {e}")
-            return None
+            print(f"[mark_attendance_by_email] Checked out {email_str} at {now}")
+        else:
+            print(f"[mark_attendance_by_email] Already checked out {email_str}")
 
     return attendance
 
-
 # =====================
-# Render face recognition page
-# =====================
-def face_recognition_page(request):
-    return render(request, "face_recognition.html")
-
-# =====================
-# Face recognition API
+# API View
 # =====================
 @csrf_exempt
 def recognize_face(request):
@@ -198,22 +345,25 @@ def recognize_face(request):
     try:
         data = json.loads(request.body)
         image_data = data.get("image", "")
+        action = data.get("action", "").lower()
         if not image_data:
             return JsonResponse({"error": "No image data provided"}, status=400)
+        if action not in ["checkin", "checkout"]:
+            return JsonResponse({"error": "Invalid action"}, status=400)
 
-        image_data = image_data.split(",")[1]  # Remove base64 header
+        # Decode base64 image
+        image_data = image_data.split(",")[1]
         image_bytes = base64.b64decode(image_data)
         img = Image.open(BytesIO(image_bytes)).convert('RGB')
         img_np = np.array(img)
     except Exception as e:
         return JsonResponse({"error": f"Failed to process image: {e}"}, status=400)
 
+    # Face recognition
     face_encodings = face_recognition.face_encodings(img_np)
-
     username = "No face detected"
     email = None
     confidence = 0
-    attendance = None
 
     if face_encodings:
         face_encoding = face_encodings[0]
@@ -229,17 +379,16 @@ def recognize_face(request):
             username = "Unknown"
             email = None
 
-    print(f"[recognize_face] Username: {username}, Email: {email}, Confidence: {confidence}%")
+    if not email:
+        return JsonResponse({"error": "Face not recognized"}, status=400)
 
-    if email:
-        attendance = mark_attendance_by_email(email)
-    else:
-        print("[recognize_face] No valid email found; attendance not marked.")
+    attendance = mark_attendance_by_email(email, action)
 
     return JsonResponse({
+        "success": True,
         "username": username,
         "email": email,
-        "confidence": f"{confidence}%" if email else "",
+        "confidence": f"{confidence}%",
         "check_in": str(attendance.check_in) if attendance else "",
         "check_out": str(attendance.check_out) if attendance else ""
     })
