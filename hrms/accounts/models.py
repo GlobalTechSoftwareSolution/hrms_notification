@@ -2,9 +2,6 @@ from django.db import models
 from django.contrib.auth.models import AbstractBaseUser, PermissionsMixin, BaseUserManager
 from django.utils import timezone
 
-# =====================
-# Custom User Manager
-# =====================
 class UserManager(BaseUserManager):
     def create_user(self, email, role, password=None, **extra_fields):
         if not email:
@@ -24,10 +21,6 @@ class UserManager(BaseUserManager):
             raise ValueError('Superuser must have is_superuser=True.')
         return self.create_user(email, role, password, **extra_fields)
 
-
-# =====================
-# User Model
-# =====================
 class User(AbstractBaseUser, PermissionsMixin):
     email = models.EmailField(primary_key=True, max_length=254)
     role = models.CharField(max_length=30)
@@ -42,10 +35,6 @@ class User(AbstractBaseUser, PermissionsMixin):
     def __str__(self):
         return f"{self.email} ({self.role})"
 
-
-# =====================
-# HR Model
-# =====================
 class HR(models.Model):
     email = models.OneToOneField(User, on_delete=models.CASCADE, to_field='email', primary_key=True)
     fullname = models.CharField(max_length=255)
@@ -61,10 +50,6 @@ class HR(models.Model):
     def __str__(self):
         return f"{self.fullname} (HR)"
 
-
-# =====================
-# CEO Model
-# =====================
 class CEO(models.Model):
     email = models.OneToOneField(User, on_delete=models.CASCADE, to_field='email', primary_key=True)
     fullname = models.CharField(max_length=255)
@@ -80,10 +65,6 @@ class CEO(models.Model):
     def __str__(self):
         return f"{self.fullname} (CEO)"
 
-
-# =====================
-# Manager Model
-# =====================
 class Manager(models.Model):
     email = models.OneToOneField(User, on_delete=models.CASCADE, to_field='email', primary_key=True)
     fullname = models.CharField(max_length=255)
@@ -100,10 +81,6 @@ class Manager(models.Model):
     def __str__(self):
         return f"{self.fullname} (Manager)"
 
-
-# =====================
-# Employee Model
-# =====================
 class Employee(models.Model):
     email = models.OneToOneField(User, on_delete=models.CASCADE, to_field='email', primary_key=True)
     fullname = models.CharField(max_length=255)
@@ -120,10 +97,6 @@ class Employee(models.Model):
     def __str__(self):
         return f"{self.fullname} (Employee)"
 
-
-# =====================
-# Admin Model
-# =====================
 class Admin(models.Model):
     email = models.OneToOneField(User, on_delete=models.CASCADE, to_field='email', primary_key=True)
     fullname = models.CharField(max_length=255)
@@ -134,13 +107,8 @@ class Admin(models.Model):
     def __str__(self):
         return f"{self.fullname} (Admin)"
 
-
-# =====================
-# Attendance Model
-# =====================
-
-
 class Attendance(models.Model):
+    id = models.AutoField(primary_key=True)
     email = models.ForeignKey(
         User,
         on_delete=models.CASCADE,
@@ -152,20 +120,21 @@ class Attendance(models.Model):
 
     class Meta:
         ordering = ['-date']
-        unique_together = ('email', 'date')  # ensures only one record per user per date
+        unique_together = ('email', 'date')
 
     def __str__(self):
         return f"{self.email.email} ({self.email.role}) - {self.date}"
 
 
 class Leave(models.Model):
-    email = models.OneToOneField(User, on_delete=models.CASCADE, to_field='email', primary_key=True)
+    id = models.AutoField(primary_key=True)
+    email = models.ForeignKey(User, on_delete=models.CASCADE, to_field='email')
     department = models.CharField(max_length=100)
     start_date = models.DateField()
     end_date = models.DateField()
-    leave_type = models.CharField(max_length=50, null=True, blank=True)  # e.g. Sick, Casual, Paid
+    leave_type = models.CharField(max_length=50, null=True, blank=True)
     reason = models.TextField(null=True, blank=True)
-    status = models.CharField(max_length=20, default='Pending')  # e.g. Pending, Approved, Rejected
+    status = models.CharField(max_length=20, default='Pending')
     applied_on = models.DateField(auto_now_add=True)
 
     class Meta:
@@ -175,7 +144,8 @@ class Leave(models.Model):
         return f"{self.email.email} - {self.department} Leave from {self.start_date} to {self.end_date} [{self.status}]"
 
 class Payroll(models.Model):
-    email = models.OneToOneField(User, on_delete=models.CASCADE, to_field='email', primary_key=True)
+    id = models.AutoField(primary_key=True)
+    email = models.ForeignKey(User, on_delete=models.CASCADE, to_field='email')
     basic_salary = models.DecimalField(max_digits=10, decimal_places=2, default=0.00)
     allowances = models.DecimalField(max_digits=10, decimal_places=2, default=0.00)
     deductions = models.DecimalField(max_digits=10, decimal_places=2, default=0.00)
@@ -183,9 +153,8 @@ class Payroll(models.Model):
     tax = models.DecimalField(max_digits=10, decimal_places=2, default=0.00)
     net_salary = models.DecimalField(max_digits=10, decimal_places=2, default=0.00)
     pay_date = models.DateField(default=timezone.localdate)
-    month = models.CharField(max_length=20)  
+    month = models.CharField(max_length=20)
     year = models.IntegerField(default=timezone.now().year)
-
     status = models.CharField(max_length=20, choices=[
         ('Pending', 'Pending'),
         ('Paid', 'Paid'),
@@ -194,71 +163,56 @@ class Payroll(models.Model):
 
     class Meta:
         ordering = ['-pay_date']
-        unique_together = ('email', 'month', 'year')  # Prevent duplicate payroll for same month/year
+        unique_together = ('email', 'month', 'year')  # Keep unique per month/year per user
 
     def __str__(self):
         return f"Payroll for {self.email.email} - {self.month} {self.year}"
 
     def save(self, *args, **kwargs):
-        # Calculate net salary automatically
         self.net_salary = (self.basic_salary + self.allowances + self.bonus) - (self.deductions + self.tax)
         super().save(*args, **kwargs)
 
-from django.db import models
-from django.utils import timezone
-from accounts.models import User  # make sure to import your custom User model
-
 class TaskTable(models.Model):
-    task_id = models.AutoField(primary_key=True)  # unique ID for each task
-    
-    # Link each task to a user (by email, not id)
+    task_id = models.AutoField(primary_key=True)
     email = models.ForeignKey(
-        User, 
-        on_delete=models.CASCADE, 
-        to_field='email', 
+        User,
+        on_delete=models.CASCADE,
+        to_field='email',
         related_name="tasks"
     )
-
     title = models.CharField(max_length=255)
     description = models.TextField(null=True, blank=True)
-
-    # Who assigned this task (HR, Manager, CEO, Admin, etc.)
     assigned_by = models.ForeignKey(
-        User, 
-        on_delete=models.SET_NULL, 
-        null=True, 
+        User,
+        on_delete=models.SET_NULL,
+        null=True,
         blank=True,
         related_name="tasks_assigned"
     )
-
     department = models.CharField(max_length=100, null=True, blank=True)
-
     priority = models.CharField(
-        max_length=20, 
+        max_length=20,
         choices=[
             ('Low', 'Low'),
             ('Medium', 'Medium'),
             ('High', 'High'),
             ('Critical', 'Critical'),
-        ], 
+        ],
         default='Medium'
     )
-
     status = models.CharField(
-        max_length=20, 
+        max_length=20,
         choices=[
             ('Pending', 'Pending'),
             ('In Progress', 'In Progress'),
             ('Completed', 'Completed'),
             ('On Hold', 'On Hold'),
-        ], 
+        ],
         default='Pending'
     )
-
     start_date = models.DateField(default=timezone.localdate)
     due_date = models.DateField(null=True, blank=True)
     completed_date = models.DateField(null=True, blank=True)
-
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
@@ -269,3 +223,83 @@ class TaskTable(models.Model):
 
     def __str__(self):
         return f"Task: {self.title} for {self.email.email} → {self.status}"
+
+class Report(models.Model):
+    id = models.AutoField(primary_key=True)
+    title = models.CharField(max_length=255)
+    description = models.TextField(null=True, blank=True)
+    created_by = models.ForeignKey(User, on_delete=models.CASCADE, related_name='reports', null=True, blank=True)
+    date = models.DateField(default=timezone.localdate)
+    content = models.TextField(null=True, blank=True)  # For storing daily update details
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ['-date', '-created_at']
+        verbose_name = "Daily Report"
+        verbose_name_plural = "Daily Reports"
+        unique_together = ('created_by', 'date')  # One report per user per day
+
+    def __str__(self):
+        return f"{self.title} ({self.date}) by {self.created_by.email}"
+    
+class Project(models.Model):
+    id = models.AutoField(primary_key=True)
+    name = models.CharField(max_length=255)
+    description = models.TextField(null=True, blank=True)
+    email = models.ForeignKey(User, on_delete=models.CASCADE, to_field='email', related_name='owned_projects')  # <-- renamed from owner to email
+    members = models.ManyToManyField(User, related_name='projects', blank=True)
+    start_date = models.DateField(default=timezone.localdate)
+    end_date = models.DateField(null=True, blank=True)
+    status = models.CharField(
+        max_length=20,
+        choices=[
+            ('Planning', 'Planning'),
+            ('In Progress', 'In Progress'),
+            ('Completed', 'Completed'),
+            ('On Hold', 'On Hold'),
+        ],
+        default='Planning'
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ['-created_at']
+
+    def __str__(self):
+        return self.name
+
+class Notice(models.Model):
+    id = models.AutoField(primary_key=True)
+    title = models.CharField(max_length=255)
+    message = models.TextField()
+    email = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, blank=True, to_field='email', related_name='notices')
+    posted_date = models.DateTimeField(default=timezone.now)
+    valid_until = models.DateTimeField(null=True, blank=True)
+    important = models.BooleanField(default=False)
+    attachment = models.FileField(upload_to='notices/', null=True, blank=True)
+
+    class Meta:
+        ordering = ['-posted_date']
+
+    def __str__(self):
+        return self.title
+    
+from django.db import models
+from accounts.models import User  # Use your user model as needed
+
+class Fingerprint(models.Model):
+    id = models.AutoField(primary_key=True)
+    user = models.ForeignKey(User, on_delete=models.CASCADE, to_field='email', related_name='fingerprints')
+    template = models.BinaryField(null=False)  # Stores fingerprint template in binary form
+    image = models.ImageField(upload_to='fingerprints/', null=True, blank=True)  # Optional: store fingerprint image
+    device_serial = models.CharField(max_length=128, null=True, blank=True)  # Device identifier, e.g., Morpho SN
+    registered_at = models.DateTimeField(auto_now_add=True)
+    active = models.BooleanField(default=True)
+
+    class Meta:
+        ordering = ['-registered_at']
+
+    def __str__(self):
+        return f"Fingerprint for {self.user.email} (Active: {self.active})"

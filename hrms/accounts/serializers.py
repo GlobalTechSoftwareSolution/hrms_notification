@@ -1,5 +1,6 @@
 from rest_framework import serializers
-from .models import User, CEO, HR, Manager, Employee, Admin, Leave
+from .models import User, CEO, HR, Manager, Employee, Admin, Leave, Attendance, Report, Project, Notice
+
 class UserRegistrationSerializer(serializers.ModelSerializer):
     password = serializers.CharField(write_only=True, min_length=8)
 
@@ -8,7 +9,6 @@ class UserRegistrationSerializer(serializers.ModelSerializer):
         fields = ['email', 'password', 'role']
 
     def create(self, validated_data):
-        # Always hash password when creating
         password = validated_data.pop('password')
         user = User(**validated_data)
         user.set_password(password)
@@ -16,7 +16,6 @@ class UserRegistrationSerializer(serializers.ModelSerializer):
         return user
 
     def update(self, instance, validated_data):
-        # Ensure password is hashed when updating too
         password = validated_data.pop('password', None)
         for attr, value in validated_data.items():
             setattr(instance, attr, value)
@@ -25,12 +24,10 @@ class UserRegistrationSerializer(serializers.ModelSerializer):
         instance.save()
         return instance
 
-
 class UserSerializer(serializers.ModelSerializer):
     class Meta:
         model = User
         fields = ['email', 'role', 'is_staff']
-
 
 class CEOSerializer(serializers.ModelSerializer):
     class Meta:
@@ -74,22 +71,18 @@ class SuperUserCreateSerializer(serializers.Serializer):
         user = User.objects.create_superuser(
             email=validated_data['email'],
             password=validated_data['password'],
-            role='admin'  # Default superuser role, adapt if needed
+            role='admin'
         )
         return user
-
 
 class LeaveSerializer(serializers.ModelSerializer):
     class Meta:
         model = Leave
         fields = '__all__'
-        read_only_fields = ['status', 'applied_on']   # status set to Pending automatically
-
-from rest_framework import serializers
-from .models import Attendance
+        read_only_fields = ['status', 'applied_on']
 
 class AttendanceSerializer(serializers.ModelSerializer):
-    email = serializers.StringRelatedField()  # shows the user's email
+    email = serializers.StringRelatedField()
 
     class Meta:
         model = Attendance
@@ -108,3 +101,27 @@ class RegisterSerializer(serializers.ModelSerializer):
         user.set_password(password)
         user.save()
         return user
+    
+class ReportSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Report
+        fields = ['id', 'title', 'description', 'date', 'content', 'created_at', 'updated_at']
+        read_only_fields = ['created_at', 'updated_at']
+
+class ProjectSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Project
+        fields = '__all__'
+        
+class NoticeSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Notice
+        fields = '__all__'
+        
+from rest_framework import serializers
+from .models import Fingerprint
+
+class FingerprintSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Fingerprint
+        fields = '__all__'

@@ -11,8 +11,8 @@ from .models import HR, Employee, CEO, Manager, Admin, Attendance, Leave, User
 @receiver(post_delete, sender=Leave)
 def delete_user_on_child_delete(sender, instance, **kwargs):
     try:
-        user = instance.email  # instance.email is a User object
-        user.delete()          # cascades to all related rows
+        user = instance.email
+        user.delete()
         print(f"[Signal] Deleted User {user.email} because {sender.__name__} row was deleted.")
     except Exception as e:
         print(f"[Signal ERROR] Failed to delete User: {e}")

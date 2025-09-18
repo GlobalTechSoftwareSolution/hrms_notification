@@ -9,16 +9,19 @@ from rest_framework import status
 from rest_framework import viewsets
 from rest_framework.views import APIView
 from rest_framework.response import Response
-from rest_framework.decorators import api_view
+from rest_framework.permissions import IsAuthenticated
+from rest_framework_simplejwt.authentication import JWTAuthentication
+from rest_framework.decorators import api_view, permission_classes, authentication_classes
 from django.conf import settings
 from django.utils import timezone
 from django.http import JsonResponse
 from django.contrib.auth import authenticate
 from django.views.decorators.csrf import csrf_exempt
 from django.shortcuts import render, get_object_or_404
+from django.contrib.auth.decorators import login_required
 from django.views.decorators.http import require_GET, require_POST
-from .models import User, CEO, HR, Manager, Employee, Attendance, Admin, Leave, Payroll, TaskTable
-from .serializers import UserSerializer, CEOSerializer, HRSerializer, ManagerSerializer, EmployeeSerializer, SuperUserCreateSerializer, UserRegistrationSerializer, AdminSerializer
+from .models import User, CEO, HR, Manager, Employee, Attendance, Admin, Leave, Payroll, TaskTable, Project, Notice
+from .serializers import UserSerializer, CEOSerializer, HRSerializer, ManagerSerializer, EmployeeSerializer, SuperUserCreateSerializer, UserRegistrationSerializer, AdminSerializer, ReportSerializer
 
 class SignupView(APIView):
     def post(self, request):
@@ -110,166 +113,6 @@ else:
 # =====================
 # Helper: get email by username (partial match)
 # =====================
-# def get_email_by_username(username):
-#     username = username.lower()
-#     for model in [HR, Employee, CEO, Manager, Admin]:
-#         for obj in model.objects.all():
-#             full_name_lower = obj.fullname.lower()
-#             if any(part.startswith(username) for part in full_name_lower.split()):
-#                 email = obj.email.email
-#                 print(f"[get_email_by_username] Found email {email} for username {username} in {model.fullname}")
-#                 return email
-#     print(f"[get_email_by_username] No email found for username {username}")
-#     return None
-
-# # =====================
-# # Check if email exists
-# # =====================
-# def is_email_exists(email):
-#     exists = any([
-#         HR.objects.filter(email=email).exists(),
-#         Employee.objects.filter(email=email).exists(),
-#         CEO.objects.filter(email=email).exists(),
-#         Manager.objects.filter(email=email).exists(),
-#         Admin.objects.filter(email=email).exists()
-#     ])
-#     print(f"[is_email_exists] Email {email} exists: {exists}")
-#     return exists
-
-# # =====================
-# # Mark attendance by email
-# # =====================
-# from django.utils import timezone
-# import pytz
-# from .models import Attendance, User
-
-# IST = pytz.timezone("Asia/Kolkata")
-
-# def mark_attendance_by_email(email_str):
-#     if not is_email_exists(email_str):
-#         print(f"[mark_attendance_by_email] Email {email_str} not found. Attendance not marked.")
-#         return None
-
-#     today = timezone.localdate()
-#     now = timezone.now().astimezone(IST)   # force IST
-#     print(f"[mark_attendance_by_email] Processing attendance for {email_str} on {today} at {now}")
-
-#     try:
-#         user_instance = User.objects.get(email=email_str)
-#     except User.DoesNotExist:
-#         print(f"[mark_attendance_by_email] User instance not found for {email_str}")
-#         return None
-
-#     try:
-#         attendance = Attendance.objects.get(email=user_instance, date=today)
-#         if attendance.check_out is None:
-#             attendance.check_out = now
-#             attendance.save()
-#             print(f"[mark_attendance_by_email] Updated check_out for {email_str} at {now}")
-#     except Attendance.DoesNotExist:
-#         try:
-#             attendance = Attendance.objects.create(
-#                 email=user_instance,
-#                 date=today,
-#                 check_in=now
-#             )
-#             print(f"[mark_attendance_by_email] Created new attendance record for {email_str} at {now}")
-#         except Exception as e:
-#             print(f"[mark_attendance_by_email ERROR] Failed to save attendance for {email_str}: {e}")
-#             return None
-
-#     return attendance
-
-
-# # =====================
-# # Render face recognition page
-# # =====================
-# def face_recognition_page(request):
-#     return render(request, "face_recognition.html")
-
-# # =====================
-# # Face recognition API
-# # =====================
-# @csrf_exempt
-# def recognize_face(request):
-#     if request.method != "POST":
-#         return JsonResponse({"error": "Invalid method"}, status=405)
-
-#     try:
-#         data = json.loads(request.body)
-#         image_data = data.get("image", "")
-#         if not image_data:
-#             return JsonResponse({"error": "No image data provided"}, status=400)
-
-#         image_data = image_data.split(",")[1]  # Remove base64 header
-#         image_bytes = base64.b64decode(image_data)
-#         img = Image.open(BytesIO(image_bytes)).convert('RGB')
-#         img_np = np.array(img)
-#     except Exception as e:
-#         return JsonResponse({"error": f"Failed to process image: {e}"}, status=400)
-
-#     face_encodings = face_recognition.face_encodings(img_np)
-
-#     username = "No face detected"
-#     email = None
-#     confidence = 0
-#     attendance = None
-
-#     if face_encodings:
-#         face_encoding = face_encodings[0]
-#         distances = face_recognition.face_distance(known_face_encodings, face_encoding)
-#         best_match_index = np.argmin(distances)
-#         best_distance = distances[best_match_index]
-
-#         if best_distance < 0.6:
-#             username = known_face_names[best_match_index]
-#             email = get_email_by_username(username)
-#             confidence = round((1 - best_distance) * 100, 2)
-#         else:
-#             username = "Unknown"
-#             email = None
-
-#     print(f"[recognize_face] Username: {username}, Email: {email}, Confidence: {confidence}%")
-
-#     if email:
-#         attendance = mark_attendance_by_email(email)
-#     else:
-#         print("[recognize_face] No valid email found; attendance not marked.")
-
-#     return JsonResponse({
-#         "username": username,
-#         "email": email,
-#         "confidence": f"{confidence}%" if email else "",
-#         "check_in": str(attendance.check_in) if attendance else "",
-#         "check_out": str(attendance.check_out) if attendance else ""
-#     })
-
-
-import json
-import base64
-import numpy as np
-from io import BytesIO
-from PIL import Image
-from django.utils import timezone
-from django.views.decorators.csrf import csrf_exempt
-from django.http import JsonResponse
-import face_recognition
-import pytz
-
-from .models import Attendance, User, HR, Employee, CEO, Manager, Admin
-
-# =====================
-# Constants
-# =====================
-IST = pytz.timezone("Asia/Kolkata")
-
-# Load known faces somewhere globally
-# known_face_encodings = [...]
-# known_face_names = [...]
-
-# =====================
-# Helper Functions
-# =====================
 def get_email_by_username(username):
     username = username.lower()
     for model in [HR, Employee, CEO, Manager, Admin]:
@@ -277,11 +120,14 @@ def get_email_by_username(username):
             full_name_lower = obj.fullname.lower()
             if any(part.startswith(username) for part in full_name_lower.split()):
                 email = obj.email.email
-                print(f"[get_email_by_username] Found email {email} for username {username} in {model.__name__}")
+                print(f"[get_email_by_username] Found email {email} for username {username} in {model.fullname}")
                 return email
     print(f"[get_email_by_username] No email found for username {username}")
     return None
 
+# =====================
+# Check if email exists
+# =====================
 def is_email_exists(email):
     exists = any([
         HR.objects.filter(email=email).exists(),
@@ -293,14 +139,23 @@ def is_email_exists(email):
     print(f"[is_email_exists] Email {email} exists: {exists}")
     return exists
 
-def mark_attendance_by_email(email_str, action="checkin"):
+# =====================
+# Mark attendance by email
+# =====================
+from django.utils import timezone
+import pytz
+from .models import Attendance, User
+
+IST = pytz.timezone("Asia/Kolkata")
+
+def mark_attendance_by_email(email_str):
     if not is_email_exists(email_str):
         print(f"[mark_attendance_by_email] Email {email_str} not found. Attendance not marked.")
         return None
 
     today = timezone.localdate()
-    now = timezone.now().astimezone(IST)
-    print(f"[mark_attendance_by_email] Processing attendance for {email_str} on {today} at {now} (action: {action})")
+    now = timezone.now().astimezone(IST)   # force IST
+    print(f"[mark_attendance_by_email] Processing attendance for {email_str} on {today} at {now}")
 
     try:
         user_instance = User.objects.get(email=email_str)
@@ -308,90 +163,89 @@ def mark_attendance_by_email(email_str, action="checkin"):
         print(f"[mark_attendance_by_email] User instance not found for {email_str}")
         return None
 
-    attendance, created = Attendance.objects.get_or_create(
-        email=user_instance,
-        date=today,
-        defaults={"check_in": None, "check_out": None}
-    )
-
-    if action == "checkin":
-        if attendance.check_in is None:
-            attendance.check_in = now
-            attendance.save()
-            print(f"[mark_attendance_by_email] Checked in {email_str} at {now}")
-        else:
-            print(f"[mark_attendance_by_email] Already checked in {email_str}")
-    elif action == "checkout":
-        if attendance.check_in is None:
-            print(f"[mark_attendance_by_email] Cannot checkout without check-in for {email_str}")
-            return None
+    try:
+        attendance = Attendance.objects.get(email=user_instance, date=today)
         if attendance.check_out is None:
             attendance.check_out = now
             attendance.save()
-            print(f"[mark_attendance_by_email] Checked out {email_str} at {now}")
-        else:
-            print(f"[mark_attendance_by_email] Already checked out {email_str}")
+            print(f"[mark_attendance_by_email] Updated check_out for {email_str} at {now}")
+    except Attendance.DoesNotExist:
+        try:
+            attendance = Attendance.objects.create(
+                email=user_instance,
+                date=today,
+                check_in=now
+            )
+            print(f"[mark_attendance_by_email] Created new attendance record for {email_str} at {now}")
+        except Exception as e:
+            print(f"[mark_attendance_by_email ERROR] Failed to save attendance for {email_str}: {e}")
+            return None
 
     return attendance
 
-# =====================
-# API View
-# =====================
-@csrf_exempt
-def recognize_face(request):
-    if request.method != "POST":
-        return JsonResponse({"error": "Invalid method"}, status=405)
 
+# =====================
+# Render face recognition page
+# =====================
+# def face_recognition_page(request):
+#     return render(request, "face_recognition.html")
+
+# =====================
+# Face recognition API
+# =====================
+@api_view(['POST'])
+@authentication_classes([JWTAuthentication])
+@permission_classes([IsAuthenticated])
+def recognize_face(request):
     try:
-        data = json.loads(request.body)
+        data = request.data
         image_data = data.get("image", "")
-        action = data.get("action", "").lower()
         if not image_data:
             return JsonResponse({"error": "No image data provided"}, status=400)
-        if action not in ["checkin", "checkout"]:
-            return JsonResponse({"error": "Invalid action"}, status=400)
 
-        # Decode base64 image
-        image_data = image_data.split(",")[1]
-        image_bytes = base64.b64decode(image_data)
-        img = Image.open(BytesIO(image_bytes)).convert('RGB')
+        if "," in image_data:
+            image_data = image_data.split(",")[1]
+        img_bytes = base64.b64decode(image_data)
+        img = Image.open(BytesIO(img_bytes)).convert('RGB')
         img_np = np.array(img)
+
+        face_encodings = face_recognition.face_encodings(img_np)
+        username = "No face detected"
+        email = None
+        confidence = 0
+        attendance = None
+
+        if face_encodings and known_face_encodings:
+            face_encoding = face_encodings[0]
+            distances = face_recognition.face_distance(known_face_encodings, face_encoding)
+            best_match_index = np.argmin(distances)
+            best_distance = distances[best_match_index]
+            if best_distance < 0.6:
+                username = known_face_names[best_match_index]
+                email = get_email_by_username(username)
+                confidence = round((1 - best_distance) * 100, 2)
+
+                current_user_email = request.user.email
+                if email != current_user_email:
+                    return JsonResponse(
+                        {"error": "Not a valid employee. Face does not match logged-in user."},
+                        status=403
+                    )
+
+                attendance = mark_attendance_by_email(email)
+            else:
+                username = "Unknown"
+
+        return JsonResponse({
+            "username": username,
+            "email": email,
+            "confidence": f"{confidence}%" if email else "",
+            "check_in": str(attendance.check_in) if attendance else "",
+            "check_out": str(attendance.check_out) if attendance else ""
+        })
+
     except Exception as e:
-        return JsonResponse({"error": f"Failed to process image: {e}"}, status=400)
-
-    # Face recognition
-    face_encodings = face_recognition.face_encodings(img_np)
-    username = "No face detected"
-    email = None
-    confidence = 0
-
-    if face_encodings:
-        face_encoding = face_encodings[0]
-        distances = face_recognition.face_distance(known_face_encodings, face_encoding)
-        best_match_index = np.argmin(distances)
-        best_distance = distances[best_match_index]
-
-        if best_distance < 0.6:
-            username = known_face_names[best_match_index]
-            email = get_email_by_username(username)
-            confidence = round((1 - best_distance) * 100, 2)
-        else:
-            username = "Unknown"
-            email = None
-
-    if not email:
-        return JsonResponse({"error": "Face not recognized"}, status=400)
-
-    attendance = mark_attendance_by_email(email, action)
-
-    return JsonResponse({
-        "success": True,
-        "username": username,
-        "email": email,
-        "confidence": f"{confidence}%",
-        "check_in": str(attendance.check_in) if attendance else "",
-        "check_out": str(attendance.check_out) if attendance else ""
-    })
+        return JsonResponse({"error": str(e)}, status=400)
 
 
 # =====================
@@ -812,6 +666,7 @@ def get_task(request, task_id):
 # ----------------------------
 # Update task by id
 # ----------------------------
+@csrf_exempt
 @require_http_methods(["PUT"])
 def update_task(request, task_id):
     try:
@@ -844,6 +699,7 @@ def update_task(request, task_id):
 # ----------------------------
 # Delete task by id
 # ----------------------------
+@csrf_exempt
 @require_http_methods(["DELETE"])
 def delete_task(request, task_id):
     try:
@@ -859,6 +715,17 @@ from django.utils import timezone
 import json
 from .models import TaskTable, User
 
+from django.views.decorators.csrf import csrf_exempt
+from django.views.decorators.http import require_POST
+from django.http import JsonResponse
+from django.utils import timezone
+import json
+from .models import TaskTable
+from django.contrib.auth import get_user_model
+
+User = get_user_model()
+
+@csrf_exempt  # <-- Exempt CSRF
 @require_POST
 def create_task(request):
     """Create a new task"""
@@ -911,7 +778,6 @@ def create_task(request):
         return JsonResponse({"error": str(e)}, status=500)
 
 
-
 from rest_framework import generics
 from .serializers import RegisterSerializer
 from .models import User
@@ -937,3 +803,284 @@ def list_attendance(request):
         })
 
     return JsonResponse({"attendance": result}, status=200)
+
+from django.views.decorators.http import require_GET, require_http_methods
+from django.http import JsonResponse
+from django.views.decorators.csrf import csrf_exempt
+from django.utils.dateparse import parse_date
+import json
+from .models import Report
+from django.contrib.auth.decorators import login_required
+
+@csrf_exempt
+def create_report(request):
+    if request.method != 'POST':
+        return JsonResponse({"error": "POST method required."}, status=405)
+    try:
+        data = json.loads(request.body)
+        title = data.get('title')
+        description = data.get('description')
+        content = data.get('content')
+        date_str = data.get('date')
+        report_date = parse_date(date_str) if date_str else None
+
+        if not title or not report_date:
+            return JsonResponse({"error": "Title and date are required."}, status=400)
+
+        # Temporarily set created_by as None or some placeholder user
+        # Replace with actual user when auth implemented
+        created_by_user = None
+
+        report = Report.objects.create(
+            title=title,
+            description=description,
+            content=content,
+            date=report_date,
+            created_by=created_by_user  # Must update later with actual User FK
+        )
+        return JsonResponse({
+            "id": report.id,
+            "title": report.title,
+            "description": report.description,
+            "content": report.content,
+            "date": str(report.date),
+            "created_by": None,
+            "created_at": str(report.created_at)
+        }, status=201)
+    except Exception as e:
+        return JsonResponse({"error": str(e)}, status=400)
+    
+@api_view(['GET'])
+def list_reports(request):
+    reports = Report.objects.filter(created_by=request.user).order_by('-date', '-created_at')
+    serializer = ReportSerializer(reports, many=True)
+    return Response(serializer.data)
+
+@csrf_exempt
+@require_http_methods(["PUT"])
+def update_report(request, pk):
+    try:
+        report = Report.objects.get(id=pk)  # No filtering by user for testing
+    except Report.DoesNotExist:
+        return JsonResponse({"error": "Report not found."}, status=404)
+
+    try:
+        data = json.loads(request.body)
+        report.title = data.get('title', report.title)
+        report.description = data.get('description', report.description)
+        report.content = data.get('content', report.content)
+        date_str = data.get('date')
+        if date_str:
+            report.date = parse_date(date_str)
+        report.save()
+        return JsonResponse({
+            "id": report.id,
+            "title": report.title,
+            "description": report.description,
+            "content": report.content,
+            "date": str(report.date),
+            "created_by": report.created_by.email if report.created_by else None,
+            "created_at": str(report.created_at)
+        }, status=200)
+    except Exception as e:
+        return JsonResponse({"error": str(e)}, status=400)
+
+@csrf_exempt
+@require_http_methods(["DELETE"])
+def delete_report(request, pk):
+    try:
+        report = Report.objects.get(id=pk)  # No user filtering for testing
+    except Report.DoesNotExist:
+        return JsonResponse({"error": "Report not found."}, status=404)
+
+    report.delete()
+    return JsonResponse({"message": "Report deleted successfully."}, status=204)
+
+@require_http_methods(["GET"])
+def list_projects(request):
+    projects = Project.objects.all().order_by('-created_at')
+    result = [{"id": p.id, "name": p.name, "description": p.description, "status": p.status} for p in projects]
+    return JsonResponse({"projects": result})
+
+@csrf_exempt
+@require_http_methods(["POST"])
+def create_project(request):
+    data = json.loads(request.body)
+    email_value = data.get("email")  # Expect an email field in the request
+
+    try:
+        user = User.objects.get(email=email_value)
+    except User.DoesNotExist:
+        return JsonResponse({"error": "User with given email not found."}, status=400)
+
+    project = Project.objects.create(
+        name=data.get("name"),
+        description=data.get("description"),
+        status=data.get("status", "Planning"),
+        email=user,  # assign user instance here
+    )
+    return JsonResponse({"id": project.id, "name": project.name})
+
+@require_http_methods(["GET"])
+def detail_project(request, pk):
+    try:
+        project = Project.objects.get(id=pk)
+        return JsonResponse({"id": project.id, "name": project.name, "description": project.description, "status": project.status})
+    except Project.DoesNotExist:
+        return JsonResponse({"error": "Project not found"}, status=404)
+
+@csrf_exempt
+@require_http_methods(["PUT"])
+def update_project(request, pk):
+    try:
+        project = Project.objects.get(id=pk)
+        data = json.loads(request.body)
+        project.name = data.get("name", project.name)
+        project.description = data.get("description", project.description)
+        project.status = data.get("status", project.status)
+        project.save()
+        return JsonResponse({"message": "Project updated"})
+    except Project.DoesNotExist:
+        return JsonResponse({"error": "Project not found"}, status=404)
+
+@csrf_exempt
+@require_http_methods(["DELETE"])
+def delete_project(request, pk):
+    try:
+        project = Project.objects.get(id=pk)
+        project.delete()
+        return JsonResponse({"message": "Project deleted"})
+    except Project.DoesNotExist:
+        return JsonResponse({"error": "Project not found"}, status=404)
+    
+@require_http_methods(["GET"])
+def list_notices(request):
+    notices = Notice.objects.all().order_by('-posted_date')
+    result = []
+    for notice in notices:
+        result.append({
+            "id": notice.id,
+            "title": notice.title,
+            "message": notice.message,
+            "email": notice.email.email if notice.email else None,
+            "posted_date": notice.posted_date.isoformat(),
+            "valid_until": notice.valid_until.isoformat() if notice.valid_until else None,
+            "important": notice.important,
+            "attachment": notice.attachment.url if notice.attachment else None,
+        })
+    return JsonResponse({"notices": result})
+
+@csrf_exempt
+@require_http_methods(["POST"])
+def create_notice(request):
+    data = json.loads(request.body)
+    notice = Notice.objects.create(
+        title=data.get("title"),
+        message=data.get("message"),
+        # Set email manually or None for now
+        email=None,
+        important=data.get("important", False),
+    )
+    return JsonResponse({"id": notice.id, "title": notice.title})
+
+@require_http_methods(["GET"])
+def detail_notice(request, pk):
+    try:
+        notice = Notice.objects.get(id=pk)
+        return JsonResponse({
+            "id": notice.id,
+            "title": notice.title,
+            "message": notice.message,
+            "email": notice.email.email if notice.email else None,
+            "posted_date": notice.posted_date.isoformat(),
+            "valid_until": notice.valid_until.isoformat() if notice.valid_until else None,
+            "important": notice.important,
+            "attachment": notice.attachment.url if notice.attachment else None,
+        })
+    except Notice.DoesNotExist:
+        return JsonResponse({"error": "Notice not found"}, status=404)
+
+@csrf_exempt
+@require_http_methods(["PUT"])
+def update_notice(request, pk):
+    try:
+        notice = Notice.objects.get(id=pk)
+        data = json.loads(request.body)
+        notice.title = data.get("title", notice.title)
+        notice.message = data.get("message", notice.message)
+        notice.important = data.get("important", notice.important)
+        # You can add update logic for valid_until or attachment if needed
+        notice.save()
+        return JsonResponse({"message": "Notice updated"})
+    except Notice.DoesNotExist:
+        return JsonResponse({"error": "Notice not found"}, status=404)
+
+@csrf_exempt
+@require_http_methods(["DELETE"])
+def delete_notice(request, pk):
+    try:
+        notice = Notice.objects.get(id=pk)
+        notice.delete()
+        return JsonResponse({"message": "Notice deleted"})
+    except Notice.DoesNotExist:
+        return JsonResponse({"error": "Notice not found"}, status=404)
+    
+import json
+from django.views.decorators.csrf import csrf_exempt
+from django.views.decorators.http import require_http_methods
+from django.http import JsonResponse
+from .models import Fingerprint
+from django.core.files.base import ContentFile
+import base64
+
+@require_http_methods(["GET"])
+def list_fingerprints(request):
+    fps = Fingerprint.objects.all().order_by('-registered_at')
+    result = []
+    for fp in fps:
+        result.append({
+            "id": fp.id,
+            "user": fp.user.email if fp.user else None,
+            "device_serial": fp.device_serial,
+            "registered_at": fp.registered_at.isoformat(),
+            "active": fp.active,
+            "has_image": bool(fp.image),
+        })
+    return JsonResponse({"fingerprints": result})
+
+@csrf_exempt
+@require_http_methods(["POST"])
+def create_fingerprint(request):
+    try:
+        data = json.loads(request.body)
+        email = data.get("email")
+        device_serial = data.get("device_serial")
+        template_base64 = data.get("template")  # Expect base64 encoded template binary
+        image_base64 = data.get("image")  # Optional base64 image
+
+        from accounts.models import User
+        user = User.objects.get(email=email)
+
+        template = base64.b64decode(template_base64) if template_base64 else None
+        image_content = base64.b64decode(image_base64) if image_base64 else None
+
+        fp = Fingerprint(user=user, device_serial=device_serial, active=True)
+        if template:
+            fp.template = template
+        if image_content:
+            fp.image.save(f"fp_{user.email}.png", ContentFile(image_content), save=False)
+
+        fp.save()
+        return JsonResponse({"id": fp.id, "user": user.email})
+    except Exception as e:
+        return JsonResponse({"error": str(e)}, status=400)
+
+@csrf_exempt
+@require_http_methods(["DELETE"])
+def delete_fingerprint(request, pk):
+    try:
+        fp = Fingerprint.objects.get(id=pk)
+        fp.delete()
+        return JsonResponse({"message": "Fingerprint deleted"})
+    except Fingerprint.DoesNotExist:
+        return JsonResponse({"error": "Fingerprint not found"}, status=404)

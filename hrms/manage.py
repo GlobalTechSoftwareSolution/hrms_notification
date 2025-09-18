@@ -1,3 +1,12 @@
+import warnings
+
+# Suppress pkg_resources deprecation warnings
+warnings.filterwarnings(
+    "ignore",
+    message="pkg_resources is deprecated as an API.*"
+)
+
+
 #!/usr/bin/env python
 """Django's command-line utility for administrative tasks."""
 import os
