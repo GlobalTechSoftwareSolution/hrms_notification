@@ -12,7 +12,8 @@ from accounts.views import (
     list_tasks, get_task, update_task, delete_task, create_task,
     list_reports, create_report, update_report, delete_report,
     list_projects, create_project, detail_project, update_project, delete_project,
-    list_notices, create_notice, detail_notice, update_notice, delete_notice
+    list_notices, create_notice, detail_notice, update_notice, delete_notice,
+    get_employee_by_email
 )
 
 urlpatterns = [
@@ -76,4 +77,6 @@ urlpatterns = [
     path('notice/<int:pk>/', detail_notice, name='detail_notice'),
     path('update_notice/<int:pk>/', update_notice, name='update_notice'),
     path('delete_notice/<int:pk>/', delete_notice, name='delete_notice'),
+    
+    path('api/accounts/employees/<str:email>/', get_employee_by_email, name='get_employee_by_email'),
 ]

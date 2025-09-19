@@ -1024,3 +1024,15 @@ def delete_notice(request, pk):
         return JsonResponse({"message": "Notice deleted"})
     except Notice.DoesNotExist:
         return JsonResponse({"error": "Notice not found"}, status=404)
+    
+@api_view(['GET'])
+def get_employee_by_email(request, email):
+    try:
+        employee = Employee.objects.get(email=email)
+        return JsonResponse({
+            "email": employee.email.email,
+            "fullname": employee.fullname,
+            "profile_picture": employee.profile_picture.url if employee.profile_picture else "",
+        })
+    except Employee.DoesNotExist:
+        return JsonResponse({"error": "Employee not found"}, status=404)
