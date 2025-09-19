@@ -131,7 +131,7 @@ DATABASES = {
     'default': {
         'ENGINE': 'django.db.backends.postgresql_psycopg2',
         # 'HOST': 'db.hdojjnserrsqekrpgyjr.supabase.co', #hrms
-        'HOST': 'db.ejanftgxxtlbadbqzdib.supabase.co', 
+        'HOST': 'db.ejanftgxxtlbadbqzdib.supabase.co', #test 
         'NAME': 'postgres',
         'USER': 'postgres',
         'PORT': '5432',
