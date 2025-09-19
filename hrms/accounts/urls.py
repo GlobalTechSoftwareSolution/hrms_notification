@@ -78,5 +78,5 @@ urlpatterns = [
     path('update_notice/<int:pk>/', update_notice, name='update_notice'),
     path('delete_notice/<int:pk>/', delete_notice, name='delete_notice'),
     
-    path('api/accounts/employees/<str:email>/', get_employee_by_email, name='get_employee_by_email'),
+    path('employees/<str:email>/', get_employee_by_email, name='get_employee_by_email'),
 ]
