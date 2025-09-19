@@ -127,33 +127,33 @@ WSGI_APPLICATION = 'hrms.wsgi.application'
 # Database
 # https://docs.djangoproject.com/en/5.2/ref/settings/#databases
 
-# DATABASES = {
-#     'default': {
-#         'ENGINE': 'django.db.backends.postgresql_psycopg2',
-#         'HOST': 'db.hdojjnserrsqekrpgyjr.supabase.co',
-#         # 'HOST': 'db.ejanftgxxtlbadbqzdib.supabase.co',
-#         'NAME': 'postgres',
-#         'USER': 'postgres',
-#         'PORT': '5432',
-#         'PASSWORD': 'Bengaluru@2021'
-#     }
-# }
+DATABASES = {
+    'default': {
+        'ENGINE': 'django.db.backends.postgresql_psycopg2',
+        'HOST': 'db.hdojjnserrsqekrpgyjr.supabase.co',
+        # 'HOST': 'db.ejanftgxxtlbadbqzdib.supabase.co',
+        'NAME': 'postgres',
+        'USER': 'postgres',
+        'PORT': '5432',
+        'PASSWORD': 'Bengaluru@2021'
+    }
+}
 
-import os
-from pathlib import Path
-from dotenv import load_dotenv
-import dj_database_url
-from decouple import config
+# import os
+# from pathlib import Path
+# from dotenv import load_dotenv
+# import dj_database_url
+# from decouple import config
 
-BASE_DIR = Path(__file__).resolve().parent.parent
+# BASE_DIR = Path(__file__).resolve().parent.parent
 
-# Load environment variables from .env (for local dev only)
-load_dotenv(BASE_DIR / ".env")
+# # Load environment variables from .env (for local dev only)
+# load_dotenv(BASE_DIR / ".env")
 
-SECRET_KEY = os.getenv("DJANGO_SECRET_KEY", "fallback-secret-key")
-DEBUG = True
+# SECRET_KEY = os.getenv("DJANGO_SECRET_KEY", "fallback-secret-key")
+# DEBUG = True
 
-ALLOWED_HOSTS = ['https://test-gaut.onrender.com', 'test-gaut.onrender.com']
+# ALLOWED_HOSTS = ["*"]
 
 
 # Password validation
