@@ -879,12 +879,23 @@ def create_report(request):
     except Exception as e:
         return JsonResponse({"error": str(e)}, status=400)
 
-    
-@api_view(['GET'])
+@require_http_methods(["GET"])
 def list_reports(request):
-    reports = Report.objects.filter(created_by=request.user).order_by('-date', '-created_at')
-    serializer = ReportSerializer(reports, many=True)
-    return Response(serializer.data)
+    reports = Report.objects.all().order_by('-date', '-created_at')
+    result = []
+    for r in reports:
+        result.append({
+            "id": r.id,
+            "title": r.title,
+            "description": r.description,
+            "date": str(r.date),
+            "content": r.content,
+            "email": r.email.email if r.email else None,
+            "created_at": r.created_at.isoformat()
+        })
+    return JsonResponse({"reports": result})
+
+
 
 @csrf_exempt
 @require_http_methods(["PUT"])
