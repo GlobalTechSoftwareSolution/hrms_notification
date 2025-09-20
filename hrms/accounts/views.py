@@ -834,31 +834,38 @@ import json
 from .models import Report
 from django.contrib.auth.decorators import login_required
 
+from django.contrib.auth import get_user_model
+User = get_user_model()
+
+from django.contrib.auth import get_user_model
+User = get_user_model()
+
 @csrf_exempt
+@require_http_methods(["POST"])
 def create_report(request):
-    if request.method != 'POST':
-        return JsonResponse({"error": "POST method required."}, status=405)
     try:
         data = json.loads(request.body)
         title = data.get('title')
         description = data.get('description')
         content = data.get('content')
         date_str = data.get('date')
+        email_str = data.get('email')
+
         report_date = parse_date(date_str) if date_str else None
 
-        if not title or not report_date:
-            return JsonResponse({"error": "Title and date are required."}, status=400)
+        if not title or not report_date or not email_str:
+            return JsonResponse({"error": "Title, date, and email are required."}, status=400)
 
-        # Temporarily set created_by as None or some placeholder user
-        # Replace with actual user when auth implemented
-        created_by_user = None
+        user = User.objects.filter(email=email_str).first()
+        if not user:
+            return JsonResponse({"error": "User with this email not found."}, status=404)
 
         report = Report.objects.create(
             title=title,
             description=description,
             content=content,
             date=report_date,
-            created_by=created_by_user  # Must update later with actual User FK
+            email=user
         )
         return JsonResponse({
             "id": report.id,
@@ -866,11 +873,12 @@ def create_report(request):
             "description": report.description,
             "content": report.content,
             "date": str(report.date),
-            "created_by": None,
+            "email": report.email.email,
             "created_at": str(report.created_at)
         }, status=201)
     except Exception as e:
         return JsonResponse({"error": str(e)}, status=400)
+
     
 @api_view(['GET'])
 def list_reports(request):
@@ -992,18 +1000,36 @@ def list_notices(request):
         })
     return JsonResponse({"notices": result})
 
+from django.views.decorators.csrf import csrf_exempt
+from django.views.decorators.http import require_http_methods
+from django.http import JsonResponse
+from django.shortcuts import get_object_or_404
+import json
+from .models import Notice, User
+
 @csrf_exempt
 @require_http_methods(["POST"])
 def create_notice(request):
-    data = json.loads(request.body)
-    notice = Notice.objects.create(
-        title=data.get("title"),
-        message=data.get("message"),
-        # Set email manually or None for now
-        email=None,
-        important=data.get("important", False),
-    )
-    return JsonResponse({"id": notice.id, "title": notice.title})
+    try:
+        data = json.loads(request.body)
+        email_str = data.get("email")
+        email_user = None
+        if email_str:
+            # Try to get User instance, or else leave null
+            email_user = User.objects.filter(email=email_str).first()
+
+        notice = Notice.objects.create(
+            title=data.get("title"),
+            message=data.get("message"),
+            email=email_user,
+            important=data.get("important", False),
+            # If you want to handle file attachments, add logic here
+        )
+        return JsonResponse({"id": notice.id, "title": notice.title})
+
+    except Exception as e:
+        return JsonResponse({"error": str(e)}, status=400)
+
 
 @require_http_methods(["GET"])
 def detail_notice(request, pk):

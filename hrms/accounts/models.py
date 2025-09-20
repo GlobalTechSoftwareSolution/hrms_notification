@@ -228,9 +228,16 @@ class Report(models.Model):
     id = models.AutoField(primary_key=True)
     title = models.CharField(max_length=255)
     description = models.TextField(null=True, blank=True)
-    created_by = models.ForeignKey(User, on_delete=models.CASCADE, related_name='reports', null=True, blank=True)
+    email = models.ForeignKey(
+        User,
+        on_delete=models.CASCADE,
+        related_name='reports',
+        null=True,
+        blank=True,
+        to_field='email'  # reference User.email as foreign key
+    )
     date = models.DateField(default=timezone.localdate)
-    content = models.TextField(null=True, blank=True)  # For storing daily update details
+    content = models.TextField(null=True, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
@@ -238,10 +245,10 @@ class Report(models.Model):
         ordering = ['-date', '-created_at']
         verbose_name = "Daily Report"
         verbose_name_plural = "Daily Reports"
-        unique_together = ('created_by', 'date')  # One report per user per day
+        unique_together = ('email', 'date')  # one report per user per date
 
     def __str__(self):
-        return f"{self.title} ({self.date}) by {self.created_by.email}"
+        return f"{self.title} ({self.date}) by {self.email.email if self.email else 'Unknown'}"
     
 class Project(models.Model):
     id = models.AutoField(primary_key=True)
