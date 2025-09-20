@@ -533,19 +533,22 @@ def create_payroll(request):
     except Exception as e:
         return JsonResponse({"error": str(e)}, status=400)
 
+from django.http import JsonResponse
+from django.views.decorators.csrf import csrf_exempt
+import json
+from django.shortcuts import get_object_or_404
+from .models import Payroll
 
 @csrf_exempt
-def update_payroll_status(request, email):
-    """Update payroll status (Pending, Paid, Failed)"""
+def update_payroll_status(request, payroll_id):
+    """Update payroll status using payroll ID."""
     if request.method != "PATCH":
         return JsonResponse({"error": "Only PATCH method allowed"}, status=405)
-
     try:
-        user = get_object_or_404(User, email=email)
-        payroll = get_object_or_404(Payroll, email=user)
-
+        payroll = get_object_or_404(Payroll, id=payroll_id)
         data = json.loads(request.body)
         new_status = data.get("status")
+
         if new_status not in ["Pending", "Paid", "Failed"]:
             return JsonResponse({"error": "Invalid status"}, status=400)
 
@@ -569,6 +572,8 @@ def update_payroll_status(request, email):
             }
         }, status=200)
 
+    except Payroll.DoesNotExist:
+        return JsonResponse({"error": "Payroll record not found"}, status=404)
     except Exception as e:
         return JsonResponse({"error": str(e)}, status=400)
 

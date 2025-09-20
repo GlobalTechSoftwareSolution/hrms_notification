@@ -51,7 +51,7 @@ urlpatterns = [
     path('list_leaves/', list_leaves, name='list_leaves'),
 
     path('create_payroll/', create_payroll, name='create_payroll'),
-    path('update_payroll/<path:email>/', update_payroll_status, name='update_payroll_status'),
+    path('update_payroll/<int:payroll_id>/', update_payroll_status, name='update_payroll_status'),
     path('get_payroll/<path:email>/', get_payroll, name='get_payroll'),
     path('list_payrolls/', list_payrolls, name='list_payrolls'),
 
