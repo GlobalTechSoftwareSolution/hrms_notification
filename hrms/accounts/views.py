@@ -339,31 +339,49 @@ class CEOViewSet(viewsets.ModelViewSet):
     serializer_class = CEOSerializer
     lookup_field = 'email'
 
+from django.http import JsonResponse
+from django.views.decorators.csrf import csrf_exempt
+import json
+from django.shortcuts import get_object_or_404
+from django.db.models import Q
+from .models import Leave, User
+
 @csrf_exempt
 def apply_leave(request):
-    """Employee applies for leave. If leave already exists, return error."""
+    """Employee applies for leave. If overlapping leave with status Pending or Approved exists, return error."""
     if request.method != "POST":
         return JsonResponse({"error": "Only POST method allowed"}, status=405)
-
     try:
         data = json.loads(request.body)
         email = data.get("email")
         user = get_object_or_404(User, email=email)
 
-        # Check if leave already exists for this user
-        if Leave.objects.filter(email=user).exists():
-            return JsonResponse({"error": "You already have a leave request. Wait for it to be processed."}, status=400)
+        new_start = data.get("start_date")
+        new_end = data.get("end_date")
+
+        if not new_start or not new_end:
+            return JsonResponse({"error": "Start date and end date are required."}, status=400)
+
+        # Check for overlapping leaves with status Pending or Approved
+        overlapping_leave_exists = Leave.objects.filter(
+            email=user,
+            status__in=['Pending', 'Approved'],
+        ).filter(
+            Q(start_date__lte=new_end) & Q(end_date__gte=new_start)
+        ).exists()
+
+        if overlapping_leave_exists:
+            return JsonResponse({"error": "You already have a leave request overlapping requested dates."}, status=400)
 
         leave = Leave.objects.create(
             email=user,
             department=data.get("department"),
-            start_date=data.get("start_date"),
-            end_date=data.get("end_date"),
+            start_date=new_start,
+            end_date=new_end,
             leave_type=data.get("leave_type", ""),
             reason=data.get("reason", ""),
             status="Pending"
         )
-
         return JsonResponse({
             "message": "Leave request submitted successfully",
             "leave": {
@@ -376,30 +394,24 @@ def apply_leave(request):
                 "status": leave.status
             }
         }, status=201)
-
     except Exception as e:
         return JsonResponse({"error": str(e)}, status=400)
 
 
+
 @csrf_exempt
-def update_leave_status(request, email):
-    """Manager approves or rejects leave."""
+def update_leave_status(request, leave_id):
+    """Manager approves or rejects leave by leave ID."""
     if request.method != "PATCH":
         return JsonResponse({"error": "Only PATCH method allowed"}, status=405)
-
     try:
-        user = get_object_or_404(User, email=email)
-        leave = get_object_or_404(Leave, email=user)
-
+        leave = get_object_or_404(Leave, id=leave_id)
         data = json.loads(request.body)
         new_status = data.get("status")
-
         if new_status not in ["Approved", "Rejected"]:
             return JsonResponse({"error": "Invalid status. Must be Approved or Rejected."}, status=400)
-
         leave.status = new_status
         leave.save()
-
         return JsonResponse({
             "message": f"Leave request {new_status}",
             "leave": {
@@ -412,9 +424,9 @@ def update_leave_status(request, email):
                 "status": leave.status
             }
         }, status=200)
-
     except Exception as e:
         return JsonResponse({"error": str(e)}, status=400)
+
 
 def leaves_today(request):
     """List all employees on leave today"""
