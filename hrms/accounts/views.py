@@ -943,25 +943,69 @@ def list_projects(request):
     result = [{"id": p.id, "name": p.name, "description": p.description, "status": p.status} for p in projects]
     return JsonResponse({"projects": result})
 
+
 @csrf_exempt
 @require_http_methods(["POST"])
 def create_project(request):
-    data = json.loads(request.body)
-    email_value = data.get("email")  # Expect an email field in the request
-
     try:
-        user = User.objects.get(email=email_value)
-    except User.DoesNotExist:
-        return JsonResponse({"error": "User with given email not found."}, status=400)
+        # Parse JSON body
+        data = json.loads(request.body)
 
-    project = Project.objects.create(
-        name=data.get("name"),
-        description=data.get("description"),
-        status=data.get("status", "Planning"),
-        email=user,  # assign user instance here
-    )
-    return JsonResponse({"id": project.id, "name": project.name})
+        # Validate owner email
+        owner_email = data.get("email")
+        if not owner_email:
+            return JsonResponse({"error": "Owner email is required."}, status=400)
+        try:
+            owner_user = User.objects.get(email=owner_email)
+        except User.DoesNotExist:
+            return JsonResponse({"error": "User with given owner email not found."}, status=400)
 
+        # Validate basic project data
+        name = data.get("name")
+        if not name:
+            return JsonResponse({"error": "Project name is required."}, status=400)
+        status = data.get("status", "Planning")
+        start_date = data.get("start_date")
+        end_date = data.get("end_date")
+        description = data.get("description")
+
+        # Create project instance (without members for now)
+        project = Project.objects.create(
+            name=name,
+            description=description,
+            status=status,
+            email=owner_user,
+            start_date=start_date,
+            end_date=end_date,
+        )
+
+        # Handle members list
+        member_emails = data.get("members", [])
+        if member_emails:
+            members = User.objects.filter(email__in=member_emails)
+            # Check for missing emails
+            missing_emails = set(member_emails) - set(members.values_list('email', flat=True))
+            if missing_emails:
+                return JsonResponse({
+                    "error": "Some member emails not found.",
+                    "missing_emails": list(missing_emails)
+                }, status=400)
+            # Assign members to project many-to-many field
+            project.members.set(members)
+
+        return JsonResponse({
+            "message": "Project created successfully",
+            "id": project.id,
+            "name": project.name
+        }, status=201)
+
+    except json.JSONDecodeError:
+        return JsonResponse({"error": "Invalid JSON."}, status=400)
+
+    except Exception as e:
+        return JsonResponse({"error": str(e)}, status=500)
+    
+    
 @require_http_methods(["GET"])
 def detail_project(request, pk):
     try:
