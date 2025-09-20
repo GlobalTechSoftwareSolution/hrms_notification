@@ -9,6 +9,7 @@ from rest_framework import status
 from rest_framework import viewsets
 from rest_framework.views import APIView
 from rest_framework.response import Response
+from rest_framework.permissions import AllowAny
 from rest_framework.permissions import IsAuthenticated
 from rest_framework_simplejwt.authentication import JWTAuthentication
 from rest_framework.decorators import api_view, permission_classes, authentication_classes
@@ -194,8 +195,7 @@ def mark_attendance_by_email(email_str):
 # Face recognition API
 # =====================
 @api_view(['POST'])
-@authentication_classes([JWTAuthentication])
-@permission_classes([IsAuthenticated])
+@permission_classes([AllowAny])
 def recognize_face(request):
     try:
         data = request.data
@@ -205,6 +205,7 @@ def recognize_face(request):
 
         if "," in image_data:
             image_data = image_data.split(",")[1]
+
         img_bytes = base64.b64decode(image_data)
         img = Image.open(BytesIO(img_bytes)).convert('RGB')
         img_np = np.array(img)
@@ -220,18 +221,13 @@ def recognize_face(request):
             distances = face_recognition.face_distance(known_face_encodings, face_encoding)
             best_match_index = np.argmin(distances)
             best_distance = distances[best_match_index]
+
             if best_distance < 0.6:
                 username = known_face_names[best_match_index]
                 email = get_email_by_username(username)
                 confidence = round((1 - best_distance) * 100, 2)
 
-                current_user_email = request.user.email
-                if email != current_user_email:
-                    return JsonResponse(
-                        {"error": "Not a valid employee. Face does not match logged-in user."},
-                        status=403
-                    )
-
+                # Directly mark attendance without checking request.user
                 attendance = mark_attendance_by_email(email)
             else:
                 username = "Unknown"
