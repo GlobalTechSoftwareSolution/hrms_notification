@@ -397,21 +397,27 @@ def apply_leave(request):
     except Exception as e:
         return JsonResponse({"error": str(e)}, status=400)
 
-
+from django.http import JsonResponse
+from django.views.decorators.csrf import csrf_exempt
+from django.shortcuts import get_object_or_404
+import json
+from .models import Leave
 
 @csrf_exempt
 def update_leave_status(request, leave_id):
-    """Manager approves or rejects leave by leave ID."""
     if request.method != "PATCH":
         return JsonResponse({"error": "Only PATCH method allowed"}, status=405)
     try:
         leave = get_object_or_404(Leave, id=leave_id)
         data = json.loads(request.body)
         new_status = data.get("status")
+
         if new_status not in ["Approved", "Rejected"]:
             return JsonResponse({"error": "Invalid status. Must be Approved or Rejected."}, status=400)
+
         leave.status = new_status
         leave.save()
+
         return JsonResponse({
             "message": f"Leave request {new_status}",
             "leave": {
@@ -424,8 +430,11 @@ def update_leave_status(request, leave_id):
                 "status": leave.status
             }
         }, status=200)
+
     except Exception as e:
         return JsonResponse({"error": str(e)}, status=400)
+
+
 
 
 def leaves_today(request):

@@ -46,7 +46,7 @@ urlpatterns = [
     path('ceos/<str:email>/', CEOViewSet.as_view({'get': 'retrieve', 'put': 'update', 'delete': 'destroy'}), name='ceo-detail'),
 
     path('apply_leave/', apply_leave, name='apply_leave'),
-    path('update_leave/<path:email>/', update_leave_status, name='update_leave_status'),
+    path('update_leave/<int:leave_id>/', update_leave_status, name='update_leave_status'),
     path('leaves_today/', leaves_today, name='leaves_today'),
     path('list_leaves/', list_leaves, name='list_leaves'),
 
