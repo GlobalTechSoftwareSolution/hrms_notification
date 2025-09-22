@@ -128,17 +128,27 @@ WSGI_APPLICATION = 'hrms.wsgi.application'
 # Database
 # https://docs.djangoproject.com/en/5.2/ref/settings/#databases
 
+from pathlib import Path
+from django.urls import path
+import os 
+import dj_database_url
+from decouple import config
+
 DATABASES = {
-    'default': {
-        'ENGINE': 'django.db.backends.postgresql_psycopg2',
-        # 'HOST': 'db.hdojjnserrsqekrpgyjr.supabase.co',
-        'HOST': 'db.ejanftgxxtlbadbqzdib.supabase.co',
-        'NAME': 'postgres',
-        'USER': 'postgres',
-        'PORT': '5432',
-        'PASSWORD': 'Bengaluru@2021'
-    }
+    'default': dj_database_url.parse(config('DATABASE_URL'))
 }
+
+# DATABASES = {
+#     'default': {
+#         'ENGINE': 'django.db.backends.postgresql_psycopg2',
+#         # 'HOST': 'db.hdojjnserrsqekrpgyjr.supabase.co',
+#         'HOST': 'db.ejanftgxxtlbadbqzdib.supabase.co',
+#         'NAME': 'postgres',
+#         'USER': 'postgres',
+#         'PORT': '5432',
+#         'PASSWORD': 'Bengaluru@2021'
+#     }
+# }
 
 
 # Password validation
