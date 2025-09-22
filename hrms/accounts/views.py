@@ -2,8 +2,8 @@ import os
 import json
 import base64
 import numpy as np
-import face_recognition
-from PIL import Image
+# import face_recognition
+# from PIL import Image
 from io import BytesIO
 from rest_framework import status
 from rest_framework import viewsets
@@ -90,27 +90,6 @@ def reject_user(request):
     except User.DoesNotExist:
         return Response({'error': 'User not found'}, status=status.HTTP_404_NOT_FOUND)
 
-# =====================
-# Load known faces
-# =====================
-# KNOWN_FACES_DIR = os.path.join(settings.BASE_DIR, "images")
-# known_face_encodings = []
-# known_face_names = []
-
-# if os.path.exists(KNOWN_FACES_DIR):
-#     for filename in os.listdir(KNOWN_FACES_DIR):
-#         if filename.lower().endswith(('.jpg', '.png')):
-#             image_path = os.path.join(KNOWN_FACES_DIR, filename)
-#             image = face_recognition.load_image_file(image_path)
-#             encodings = face_recognition.face_encodings(image)
-#             if encodings:
-#                 known_face_encodings.append(encodings[0])
-#                 username, _ = os.path.splitext(filename)
-#                 known_face_names.append(username.lower())
-#                 print(f"Loaded known face: {username.lower()}")
-# else:
-#     print(f"[WARNING] Known faces directory {KNOWN_FACES_DIR} not found. Skipping face loading.")
-
 
 # =====================
 # Helper: get email by username (partial match)
@@ -195,77 +174,44 @@ def mark_attendance_by_email(email_str):
 # =====================
 # Face recognition API
 # =====================
-# @api_view(['POST'])
-# @permission_classes([AllowAny])
-# def recognize_face(request):
-#     try:
-#         data = request.data
-#         image_data = data.get("image", "")
-#         if not image_data:
-#             return JsonResponse({"error": "No image data provided"}, status=400)
 
-#         if "," in image_data:
-#             image_data = image_data.split(",")[1]
-
-#         img_bytes = base64.b64decode(image_data)
-#         img = Image.open(BytesIO(img_bytes)).convert('RGB')
-#         img_np = np.array(img)
-
-#         face_encodings = face_recognition.face_encodings(img_np)
-#         username = "No face detected"
-#         email = None
-#         confidence = 0
-#         attendance = None
-
-#         if face_encodings and known_face_encodings:
-#             face_encoding = face_encodings[0]
-#             distances = face_recognition.face_distance(known_face_encodings, face_encoding)
-#             best_match_index = np.argmin(distances)
-#             best_distance = distances[best_match_index]
-
-#             if best_distance < 0.6:
-#                 username = known_face_names[best_match_index]
-#                 email = get_email_by_username(username)
-#                 confidence = round((1 - best_distance) * 100, 2)
-
-#                 # Directly mark attendance without checking request.user
-#                 attendance = mark_attendance_by_email(email)
-#             else:
-#                 username = "Unknown"
-
-#         return JsonResponse({
-#             "username": username,
-#             "email": email,
-#             "confidence": f"{confidence}%" if email else "",
-#             "check_in": str(attendance.check_in) if attendance else "",
-#             "check_out": str(attendance.check_out) if attendance else ""
-#         })
-
-#     except Exception as e:
-#         return JsonResponse({"error": str(e)}, status=400)
-
-
-from dface import DFace  # or your lightweight face library
-df = DFace()
 import os
+import base64
+import numpy as np
+from io import BytesIO
+from PIL import Image
+import cv2
 from django.conf import settings
+from django.http import JsonResponse
+from rest_framework.decorators import api_view, permission_classes
+from rest_framework.permissions import AllowAny
 
 KNOWN_FACES_DIR = os.path.join(settings.BASE_DIR, "images")
-
-
-# Load known faces
-known_face_encodings = []
 known_face_names = []
-if os.path.isdir(KNOWN_FACES_DIR):
+known_face_descriptors = []
+
+# Initialize ORB detector globally to reuse
+orb = cv2.ORB_create()
+
+# Load known faces and compute ORB descriptors
+if os.path.exists(KNOWN_FACES_DIR):
     for filename in os.listdir(KNOWN_FACES_DIR):
         if filename.lower().endswith(('.jpg', '.png')):
             image_path = os.path.join(KNOWN_FACES_DIR, filename)
-            encoding = df.get_embedding(image_path)
-            if encoding is not None:
-                known_face_encodings.append(encoding)
-                known_face_names.append(os.path.splitext(filename)[0].lower())
+            img = cv2.imread(image_path, cv2.IMREAD_GRAYSCALE)
+            if img is not None:
+                kp, des = orb.detectAndCompute(img, None)
+                if des is not None:
+                    known_face_descriptors.append(des)
+                    username, _ = os.path.splitext(filename)
+                    known_face_names.append(username.lower())
+                    print(f"Loaded known face: {username.lower()}")
+else:
+    print(f"[WARNING] Known faces directory {KNOWN_FACES_DIR} not found. Skipping face loading.")
 
-# Recognition view
+# Face detector Haar cascade
+face_cascade = cv2.CascadeClassifier(cv2.data.haarcascades + "haarcascade_frontalface_default.xml")
+
 @api_view(['POST'])
 @permission_classes([AllowAny])
 def recognize_face(request):
@@ -279,20 +225,44 @@ def recognize_face(request):
 
     img_bytes = base64.b64decode(image_data)
     img = Image.open(BytesIO(img_bytes)).convert('RGB')
-    face_embedding = df.get_embedding(np.array(img))
+    img_np = np.array(img)
+    gray = cv2.cvtColor(img_np, cv2.COLOR_RGB2GRAY)
 
-    if face_embedding is None or not known_face_encodings:
+    # Detect faces
+    faces = face_cascade.detectMultiScale(gray, scaleFactor=1.1, minNeighbors=5)
+    if len(faces) == 0:
         return JsonResponse({"username": "No face detected"}, status=200)
 
-    distances = [df.cosine_distance(fe, face_embedding) for fe in known_face_encodings]
-    best_match_index = np.argmin(distances)
-    best_distance = distances[best_match_index]
+    x, y, w, h = faces[0]
+    face_roi = gray[y:y+h, x:x+w]
 
-    if best_distance < 0.4:
-        username = known_face_names[best_match_index]
-        email = get_email_by_username(username)
-        confidence = round((1 - best_distance) * 100, 2)
-        attendance = mark_attendance_by_email(email)
+    kp2, des2 = orb.detectAndCompute(face_roi, None)
+    if des2 is None:
+        return JsonResponse({"username": "Unknown", "reason": "No features detected in input face"}, status=200)
+
+    bf = cv2.BFMatcher(cv2.NORM_HAMMING, crossCheck=True)
+
+    best_match = None
+    best_avg_distance = 100
+
+    # Match input face with all known faces
+    for des_known, name in zip(known_face_descriptors, known_face_names):
+        matches = bf.match(des_known, des2)
+        if not matches:
+            continue
+        matches = sorted(matches, key=lambda m: m.distance)
+        avg_distance = sum(m.distance for m in matches) / len(matches)
+        if avg_distance < best_avg_distance:
+            best_avg_distance = avg_distance
+            best_match = name
+
+    threshold = 45  # Tune this threshold based on your tests
+
+    if best_match and best_avg_distance < threshold:
+        username = best_match
+        email = get_email_by_username(username)  # Your existing function
+        confidence = round((1 - (best_avg_distance / threshold)) * 100, 2)
+        attendance = mark_attendance_by_email(email)  # Your existing function
     else:
         username = "Unknown"
         email = None
@@ -306,7 +276,6 @@ def recognize_face(request):
         "check_in": str(attendance.check_in) if attendance else "",
         "check_out": str(attendance.check_out) if attendance else ""
     })
-
 
 # =====================
 # Today attendance view
