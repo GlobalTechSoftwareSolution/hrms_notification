@@ -150,6 +150,17 @@ DATABASES = {
     'default': dj_database_url.parse(config('DATABASE_URL'))
 }
 
+# DATABASES = {
+#     'default': {
+#         'ENGINE': 'django.db.backends.postgresql',
+#         'NAME': "wzcmifzynkfemwhsuola",
+#         'USER': "postgres",
+#         'PASSWORD': "Bengaluru@2021",
+#         'HOST': "wzcmifzynkfemwhsuola.db.ap-south-1.nhost.run",
+#         'PORT': '5432',
+#     }
+# }
+
 
 # Password validation
 # https://docs.djangoproject.com/en/5.2/ref/settings/#auth-password-validators
