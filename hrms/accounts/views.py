@@ -93,23 +93,24 @@ def reject_user(request):
 # =====================
 # Load known faces
 # =====================
-KNOWN_FACES_DIR = os.path.join(settings.BASE_DIR, "images")
-known_face_encodings = []
-known_face_names = []
+# KNOWN_FACES_DIR = os.path.join(settings.BASE_DIR, "images")
+# known_face_encodings = []
+# known_face_names = []
 
-if os.path.exists(KNOWN_FACES_DIR):
-    for filename in os.listdir(KNOWN_FACES_DIR):
-        if filename.lower().endswith(('.jpg', '.png')):
-            image_path = os.path.join(KNOWN_FACES_DIR, filename)
-            image = face_recognition.load_image_file(image_path)
-            encodings = face_recognition.face_encodings(image)
-            if encodings:
-                known_face_encodings.append(encodings[0])
-                username, _ = os.path.splitext(filename)
-                known_face_names.append(username.lower())
-                print(f"Loaded known face: {username.lower()}")
-else:
-    print(f"[WARNING] Known faces directory {KNOWN_FACES_DIR} not found. Skipping face loading.")
+# if os.path.exists(KNOWN_FACES_DIR):
+#     for filename in os.listdir(KNOWN_FACES_DIR):
+#         if filename.lower().endswith(('.jpg', '.png')):
+#             image_path = os.path.join(KNOWN_FACES_DIR, filename)
+#             image = face_recognition.load_image_file(image_path)
+#             encodings = face_recognition.face_encodings(image)
+#             if encodings:
+#                 known_face_encodings.append(encodings[0])
+#                 username, _ = os.path.splitext(filename)
+#                 known_face_names.append(username.lower())
+#                 print(f"Loaded known face: {username.lower()}")
+# else:
+#     print(f"[WARNING] Known faces directory {KNOWN_FACES_DIR} not found. Skipping face loading.")
+
 
 # =====================
 # Helper: get email by username (partial match)
@@ -194,54 +195,117 @@ def mark_attendance_by_email(email_str):
 # =====================
 # Face recognition API
 # =====================
+# @api_view(['POST'])
+# @permission_classes([AllowAny])
+# def recognize_face(request):
+#     try:
+#         data = request.data
+#         image_data = data.get("image", "")
+#         if not image_data:
+#             return JsonResponse({"error": "No image data provided"}, status=400)
+
+#         if "," in image_data:
+#             image_data = image_data.split(",")[1]
+
+#         img_bytes = base64.b64decode(image_data)
+#         img = Image.open(BytesIO(img_bytes)).convert('RGB')
+#         img_np = np.array(img)
+
+#         face_encodings = face_recognition.face_encodings(img_np)
+#         username = "No face detected"
+#         email = None
+#         confidence = 0
+#         attendance = None
+
+#         if face_encodings and known_face_encodings:
+#             face_encoding = face_encodings[0]
+#             distances = face_recognition.face_distance(known_face_encodings, face_encoding)
+#             best_match_index = np.argmin(distances)
+#             best_distance = distances[best_match_index]
+
+#             if best_distance < 0.6:
+#                 username = known_face_names[best_match_index]
+#                 email = get_email_by_username(username)
+#                 confidence = round((1 - best_distance) * 100, 2)
+
+#                 # Directly mark attendance without checking request.user
+#                 attendance = mark_attendance_by_email(email)
+#             else:
+#                 username = "Unknown"
+
+#         return JsonResponse({
+#             "username": username,
+#             "email": email,
+#             "confidence": f"{confidence}%" if email else "",
+#             "check_in": str(attendance.check_in) if attendance else "",
+#             "check_out": str(attendance.check_out) if attendance else ""
+#         })
+
+#     except Exception as e:
+#         return JsonResponse({"error": str(e)}, status=400)
+
+
+from dface import DFace  # or your lightweight face library
+df = DFace()
+import os
+from django.conf import settings
+
+KNOWN_FACES_DIR = os.path.join(settings.BASE_DIR, "images")
+
+
+# Load known faces
+known_face_encodings = []
+known_face_names = []
+if os.path.isdir(KNOWN_FACES_DIR):
+    for filename in os.listdir(KNOWN_FACES_DIR):
+        if filename.lower().endswith(('.jpg', '.png')):
+            image_path = os.path.join(KNOWN_FACES_DIR, filename)
+            encoding = df.get_embedding(image_path)
+            if encoding is not None:
+                known_face_encodings.append(encoding)
+                known_face_names.append(os.path.splitext(filename)[0].lower())
+
+# Recognition view
 @api_view(['POST'])
 @permission_classes([AllowAny])
 def recognize_face(request):
-    try:
-        data = request.data
-        image_data = data.get("image", "")
-        if not image_data:
-            return JsonResponse({"error": "No image data provided"}, status=400)
+    data = request.data
+    image_data = data.get("image", "")
+    if not image_data:
+        return JsonResponse({"error": "No image data provided"}, status=400)
 
-        if "," in image_data:
-            image_data = image_data.split(",")[1]
+    if "," in image_data:
+        image_data = image_data.split(",")[1]
 
-        img_bytes = base64.b64decode(image_data)
-        img = Image.open(BytesIO(img_bytes)).convert('RGB')
-        img_np = np.array(img)
+    img_bytes = base64.b64decode(image_data)
+    img = Image.open(BytesIO(img_bytes)).convert('RGB')
+    face_embedding = df.get_embedding(np.array(img))
 
-        face_encodings = face_recognition.face_encodings(img_np)
-        username = "No face detected"
+    if face_embedding is None or not known_face_encodings:
+        return JsonResponse({"username": "No face detected"}, status=200)
+
+    distances = [df.cosine_distance(fe, face_embedding) for fe in known_face_encodings]
+    best_match_index = np.argmin(distances)
+    best_distance = distances[best_match_index]
+
+    if best_distance < 0.4:
+        username = known_face_names[best_match_index]
+        email = get_email_by_username(username)
+        confidence = round((1 - best_distance) * 100, 2)
+        attendance = mark_attendance_by_email(email)
+    else:
+        username = "Unknown"
         email = None
         confidence = 0
         attendance = None
 
-        if face_encodings and known_face_encodings:
-            face_encoding = face_encodings[0]
-            distances = face_recognition.face_distance(known_face_encodings, face_encoding)
-            best_match_index = np.argmin(distances)
-            best_distance = distances[best_match_index]
-
-            if best_distance < 0.6:
-                username = known_face_names[best_match_index]
-                email = get_email_by_username(username)
-                confidence = round((1 - best_distance) * 100, 2)
-
-                # Directly mark attendance without checking request.user
-                attendance = mark_attendance_by_email(email)
-            else:
-                username = "Unknown"
-
-        return JsonResponse({
-            "username": username,
-            "email": email,
-            "confidence": f"{confidence}%" if email else "",
-            "check_in": str(attendance.check_in) if attendance else "",
-            "check_out": str(attendance.check_out) if attendance else ""
-        })
-
-    except Exception as e:
-        return JsonResponse({"error": str(e)}, status=400)
+    return JsonResponse({
+        "username": username,
+        "email": email,
+        "confidence": f"{confidence}%" if email else "",
+        "check_in": str(attendance.check_in) if attendance else "",
+        "check_out": str(attendance.check_out) if attendance else ""
+    })
 
 
 # =====================
