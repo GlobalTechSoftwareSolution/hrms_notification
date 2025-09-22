@@ -88,7 +88,7 @@ MIDDLEWARE = [
 CORS_ALLOW_ALL_ORIGINS = True
 CORS_ALLOWED_ORIGINS = [
     "http://localhost:3000",  # for local frontend dev
-    "https://hrms-backend-44ik.onrender.com",  # your live backend domain
+    "https://hrms-backend-o9py.onrender.com",  # your live backend domain
     # Add your actual Next.js frontend URL here
     "http://127.0.0.1:3000",
 ]
@@ -101,7 +101,7 @@ CORS_ALLOW_HEADERS = [
 
 # CSRF trusted origins
 CSRF_TRUSTED_ORIGINS = [
-    'https://hrms-backend-44ik.onrender.com',
+    'https://hrms-backend-o9py.onrender.com',
 ]
 
 ROOT_URLCONF = 'hrms.urls'
