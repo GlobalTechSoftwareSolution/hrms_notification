@@ -17,6 +17,7 @@ Including another URLconf
 from django.contrib import admin
 from django.http import HttpResponseRedirect, HttpResponse
 from django.urls import path, include
+from accounts.views import health_check
 
 def root_redirect(request):
     return HttpResponseRedirect('/api/accounts/login/')  # or any other route
@@ -28,6 +29,5 @@ urlpatterns = [
     path('', home, name='home'),  # Or use root_redirect
     path('admin/', admin.site.urls),
     path('api/accounts/', include('accounts.urls')),
-    
-    
+    path("health/", health_check, name="health"),
 ]

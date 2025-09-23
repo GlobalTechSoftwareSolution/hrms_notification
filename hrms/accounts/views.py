@@ -1172,3 +1172,8 @@ def get_employee_by_email(request, email):
         })
     except Employee.DoesNotExist:
         return JsonResponse({"error": "Employee not found"}, status=404)
+
+from django.http import JsonResponse
+
+def health_check(request):
+    return JsonResponse({"status": "ok"})
