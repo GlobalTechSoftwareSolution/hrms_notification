@@ -45,7 +45,7 @@ class HR(models.Model):
     date_joined = models.DateField(null=True, blank=True)
     qualification = models.CharField(max_length=255, null=True, blank=True)
     skills = models.TextField(null=True, blank=True)
-    profile_picture = models.CharField(max_length=200, null=True, blank=True)
+    profile_picture = models.ImageField(upload_to='images/', null=True, blank=True)
 
     def __str__(self):
         return f"{self.fullname} (HR)"
@@ -60,7 +60,7 @@ class CEO(models.Model):
     date_joined = models.DateField(null=True, blank=True)
     total_experience = models.DecimalField(max_digits=4, decimal_places=1, null=True, blank=True)
     bio = models.TextField(null=True, blank=True)
-    profile_picture = models.CharField(max_length=200, null=True, blank=True)
+    profile_picture = models.ImageField(upload_to='images/', null=True, blank=True)
 
     def __str__(self):
         return f"{self.fullname} (CEO)"
@@ -76,7 +76,7 @@ class Manager(models.Model):
     date_joined = models.DateField(null=True, blank=True)
     manager_level = models.CharField(max_length=50, null=True, blank=True)
     projects_handled = models.TextField(null=True, blank=True)
-    profile_picture = models.CharField(max_length=200, null=True, blank=True)
+    profile_picture = models.ImageField(upload_to='images/', null=True, blank=True)
 
     def __str__(self):
         return f"{self.fullname} (Manager)"
@@ -92,7 +92,7 @@ class Employee(models.Model):
     date_joined = models.DateField(null=True, blank=True)
     reports_to = models.ForeignKey(Manager, on_delete=models.SET_NULL, to_field='email', null=True, blank=True)
     skills = models.TextField(null=True, blank=True)
-    profile_picture = models.CharField(max_length=200, null=True, blank=True)
+    profile_picture = models.ImageField(upload_to='images/', null=True, blank=True)
 
     def __str__(self):
         return f"{self.fullname} (Employee)"
@@ -102,7 +102,7 @@ class Admin(models.Model):
     fullname = models.CharField(max_length=255)
     phone = models.CharField(max_length=20, null=True, blank=True)
     office_address = models.TextField(null=True, blank=True)
-    profile_picture = models.CharField(max_length=200, null=True, blank=True)
+    profile_picture = models.ImageField(upload_to='images/', null=True, blank=True)
 
     def __str__(self):
         return f"{self.fullname} (Admin)"

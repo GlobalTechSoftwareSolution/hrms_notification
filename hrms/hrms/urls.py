@@ -18,6 +18,8 @@ from django.contrib import admin
 from django.http import HttpResponseRedirect, HttpResponse
 from django.urls import path, include
 from accounts.views import health_check
+from django.conf import settings
+from django.conf.urls.static import static
 
 def root_redirect(request):
     return HttpResponseRedirect('/api/accounts/login/')  # or any other route
@@ -31,3 +33,6 @@ urlpatterns = [
     path('api/accounts/', include('accounts.urls')),
     path("health/", health_check, name="health"),
 ]
+
+if settings.DEBUG:
+    urlpatterns += static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)
