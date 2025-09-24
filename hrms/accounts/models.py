@@ -183,14 +183,18 @@ class Payroll(models.Model):
 
 class TaskTable(models.Model):
     task_id = models.AutoField(primary_key=True)
-    email = models.ForeignKey(
+    
+    # Assigned to user (use id, not email)
+    user = models.ForeignKey(
         User,
         on_delete=models.CASCADE,
-        to_field='email',
         related_name="tasks"
     )
+    
     title = models.CharField(max_length=255)
     description = models.TextField(null=True, blank=True)
+
+    # Assigned by user
     assigned_by = models.ForeignKey(
         User,
         on_delete=models.SET_NULL,
@@ -198,7 +202,9 @@ class TaskTable(models.Model):
         blank=True,
         related_name="tasks_assigned"
     )
+
     department = models.CharField(max_length=100, null=True, blank=True)
+    
     priority = models.CharField(
         max_length=20,
         choices=[
@@ -209,6 +215,7 @@ class TaskTable(models.Model):
         ],
         default='Medium'
     )
+
     status = models.CharField(
         max_length=20,
         choices=[
@@ -219,9 +226,11 @@ class TaskTable(models.Model):
         ],
         default='Pending'
     )
+
     start_date = models.DateField(default=timezone.localdate)
     due_date = models.DateField(null=True, blank=True)
     completed_date = models.DateField(null=True, blank=True)
+
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
@@ -231,7 +240,7 @@ class TaskTable(models.Model):
         verbose_name_plural = "Tasks"
 
     def __str__(self):
-        return f"Task: {self.title} for {self.email.email} → {self.status}"
+        return f"Task: {self.title} for {self.user.email} → {self.status}"
 
 
 class Report(models.Model):
