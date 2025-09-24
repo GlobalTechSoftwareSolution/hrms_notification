@@ -24,35 +24,42 @@ class UserRegistrationSerializer(serializers.ModelSerializer):
         instance.save()
         return instance
 
+
 class UserSerializer(serializers.ModelSerializer):
     class Meta:
         model = User
         fields = ['email', 'role', 'is_staff']
+
 
 class CEOSerializer(serializers.ModelSerializer):
     class Meta:
         model = CEO
         fields = '__all__'
 
+
 class HRSerializer(serializers.ModelSerializer):
     class Meta:
         model = HR
         fields = '__all__'
+
 
 class ManagerSerializer(serializers.ModelSerializer):
     class Meta:
         model = Manager
         fields = '__all__'
 
+
 class EmployeeSerializer(serializers.ModelSerializer):
     class Meta:
         model = Employee
         fields = '__all__'
 
+
 class AdminSerializer(serializers.ModelSerializer):
     class Meta:
         model = Admin
         fields = '__all__'
+
 
 class SuperUserCreateSerializer(serializers.Serializer):
     email = serializers.EmailField()
@@ -75,11 +82,13 @@ class SuperUserCreateSerializer(serializers.Serializer):
         )
         return user
 
+
 class LeaveSerializer(serializers.ModelSerializer):
     class Meta:
         model = Leave
         fields = '__all__'
         read_only_fields = ['status', 'applied_on']
+
 
 class AttendanceSerializer(serializers.ModelSerializer):
     email = serializers.StringRelatedField()
@@ -87,6 +96,7 @@ class AttendanceSerializer(serializers.ModelSerializer):
     class Meta:
         model = Attendance
         fields = ['email', 'date', 'check_in', 'check_out']
+
 
 class RegisterSerializer(serializers.ModelSerializer):
     password = serializers.CharField(write_only=True)
@@ -102,19 +112,21 @@ class RegisterSerializer(serializers.ModelSerializer):
         user.save()
         return user
     
+
 class ReportSerializer(serializers.ModelSerializer):
     class Meta:
         model = Report
         fields = ['id', 'title', 'description', 'date', 'content', 'created_at', 'updated_at']
         read_only_fields = ['created_at', 'updated_at']
 
+
 class ProjectSerializer(serializers.ModelSerializer):
     class Meta:
         model = Project
         fields = '__all__'
         
+
 class NoticeSerializer(serializers.ModelSerializer):
     class Meta:
         model = Notice
         fields = '__all__'
-        

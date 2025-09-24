@@ -1,28 +1,46 @@
 import os
 import json
 import base64
+import pytz
 import numpy as np
-# import face_recognition
-# from PIL import Image
+import cv2
 from io import BytesIO
-from rest_framework import status
-from rest_framework import viewsets
-from rest_framework.views import APIView
-from rest_framework.response import Response
-from rest_framework.permissions import AllowAny
-from rest_framework.permissions import IsAuthenticated
-from rest_framework_simplejwt.authentication import JWTAuthentication
-from rest_framework.decorators import api_view, permission_classes, authentication_classes
+from PIL import Image
+
 from django.conf import settings
 from django.utils import timezone
 from django.http import JsonResponse
-from django.contrib.auth import authenticate
+from django.shortcuts import get_object_or_404
 from django.views.decorators.csrf import csrf_exempt
-from django.shortcuts import render, get_object_or_404
-from django.contrib.auth.decorators import login_required
-from django.views.decorators.http import require_GET, require_POST
-from .models import User, CEO, HR, Manager, Employee, Attendance, Admin, Leave, Payroll, TaskTable, Project, Notice
-from .serializers import UserSerializer, CEOSerializer, HRSerializer, ManagerSerializer, EmployeeSerializer, SuperUserCreateSerializer, UserRegistrationSerializer, AdminSerializer, ReportSerializer
+from django.views.decorators.http import require_GET, require_POST, require_http_methods
+from django.contrib.auth import authenticate, get_user_model
+# from django.contrib.auth.decorators import login_required
+from django.utils.dateparse import parse_date
+
+from django.db.models import Q
+
+from rest_framework import status, viewsets, generics
+from rest_framework.views import APIView
+from rest_framework.response import Response
+from rest_framework.permissions import AllowAny
+from rest_framework.decorators import api_view, permission_classes
+
+# Models
+from .models import (
+    User, CEO, HR, Manager, Employee, Attendance, Admin,
+    Leave, Payroll, TaskTable, Project, Notice, Report
+)
+
+# Serializers
+from .serializers import (
+    UserSerializer, CEOSerializer, HRSerializer, ManagerSerializer,
+    EmployeeSerializer, SuperUserCreateSerializer, UserRegistrationSerializer,
+    AdminSerializer, ReportSerializer, RegisterSerializer
+)
+
+# Ensure User model points to custom one
+User = get_user_model()
+
 
 class SignupView(APIView):
     def post(self, request):
@@ -31,6 +49,7 @@ class SignupView(APIView):
             user = serializer.save()
             return Response({'user': serializer.data, 'message': 'Signup successful'}, status=status.HTTP_201_CREATED)
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
 
 class LoginView(APIView):
     def post(self, request):
@@ -50,6 +69,7 @@ class LoginView(APIView):
             return Response({'user': serializer.data, 'message': 'Login successful'}, status=status.HTTP_200_OK)
         return Response({'error': 'Invalid credentials'}, status=status.HTTP_401_UNAUTHORIZED)
 
+
 class CreateSuperUserView(APIView):
     def post(self, request):
         serializer = SuperUserCreateSerializer(data=request.data)
@@ -65,6 +85,7 @@ class CreateSuperUserView(APIView):
             )
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
+
 @api_view(['POST'])
 def approve_user(request):
     email = request.data.get('email')
@@ -77,6 +98,7 @@ def approve_user(request):
         return Response({'success': True, 'email': email})
     except User.DoesNotExist:
         return Response({'error': 'User not found'}, status=status.HTTP_404_NOT_FOUND)
+
 
 @api_view(['POST'])
 def reject_user(request):
@@ -106,6 +128,7 @@ def get_email_by_username(username):
     print(f"[get_email_by_username] No email found for username {username}")
     return None
 
+
 # =====================
 # Check if email exists
 # =====================
@@ -120,13 +143,10 @@ def is_email_exists(email):
     print(f"[is_email_exists] Email {email} exists: {exists}")
     return exists
 
+
 # =====================
 # Mark attendance by email
 # =====================
-from django.utils import timezone
-import pytz
-from .models import Attendance, User
-
 IST = pytz.timezone("Asia/Kolkata")
 
 def mark_attendance_by_email(email_str):
@@ -166,26 +186,8 @@ def mark_attendance_by_email(email_str):
 
 
 # =====================
-# Render face recognition page
-# =====================
-# def face_recognition_page(request):
-#     return render(request, "face_recognition.html")
-
-# =====================
 # Face recognition API
 # =====================
-
-import os
-import base64
-import numpy as np
-from io import BytesIO
-from PIL import Image
-import cv2
-from django.conf import settings
-from django.http import JsonResponse
-from rest_framework.decorators import api_view, permission_classes
-from rest_framework.permissions import AllowAny
-
 KNOWN_FACES_DIR = os.path.join(settings.BASE_DIR, "images")
 known_face_names = []
 known_face_descriptors = []
@@ -208,6 +210,7 @@ if os.path.exists(KNOWN_FACES_DIR):
                     print(f"Loaded known face: {username.lower()}")
 else:
     print(f"[WARNING] Known faces directory {KNOWN_FACES_DIR} not found. Skipping face loading.")
+
 
 # Face detector Haar cascade
 face_cascade = cv2.CascadeClassifier(cv2.data.haarcascades + "haarcascade_frontalface_default.xml")
@@ -277,6 +280,7 @@ def recognize_face(request):
         "check_out": str(attendance.check_out) if attendance else ""
     })
 
+
 # =====================
 # Today attendance view
 # =====================
@@ -296,6 +300,7 @@ def today_attendance(request):
 
     return JsonResponse({"attendances": data})
 
+
 # Helper function to handle PUT
 def handle_put(request, ModelClass, SerializerClass):
     try:
@@ -311,6 +316,7 @@ def handle_put(request, ModelClass, SerializerClass):
         serializer.save()
         return JsonResponse(serializer.data)
     return JsonResponse(serializer.errors, status=400)
+
 
 # Helper function to handle DELETE
 def handle_delete(request, ModelClass):
@@ -338,6 +344,7 @@ def handle_delete(request, ModelClass):
     except ModelClass.DoesNotExist:
         return JsonResponse({"error": f"{ModelClass._name_} not found"}, status=404)
 
+
 class UserViewSet(viewsets.ModelViewSet):
     queryset = User.objects.all()
     lookup_field = 'email'
@@ -347,37 +354,36 @@ class UserViewSet(viewsets.ModelViewSet):
             return UserRegistrationSerializer
         return UserSerializer
 
+
 class EmployeeViewSet(viewsets.ModelViewSet):
     queryset = Employee.objects.all()
     serializer_class = EmployeeSerializer
     lookup_field = 'email'
+
 
 class HRViewSet(viewsets.ModelViewSet):
     queryset = HR.objects.all()
     serializer_class = HRSerializer
     lookup_field = 'email'
 
+
 class ManagerViewSet(viewsets.ModelViewSet):
     queryset = Manager.objects.all()
     serializer_class = ManagerSerializer
     lookup_field = 'email'
+
 
 class AdminViewSet(viewsets.ModelViewSet):
     queryset = Admin.objects.all()
     serializer_class = AdminSerializer
     lookup_field = 'email'
 
+
 class CEOViewSet(viewsets.ModelViewSet):
     queryset = CEO.objects.all()
     serializer_class = CEOSerializer
     lookup_field = 'email'
 
-from django.http import JsonResponse
-from django.views.decorators.csrf import csrf_exempt
-import json
-from django.shortcuts import get_object_or_404
-from django.db.models import Q
-from .models import Leave, User
 
 @csrf_exempt
 def apply_leave(request):
@@ -430,11 +436,6 @@ def apply_leave(request):
     except Exception as e:
         return JsonResponse({"error": str(e)}, status=400)
 
-from django.http import JsonResponse
-from django.views.decorators.csrf import csrf_exempt
-from django.shortcuts import get_object_or_404
-import json
-from .models import Leave
 
 @csrf_exempt
 def update_leave_status(request, leave_id):
@@ -468,8 +469,6 @@ def update_leave_status(request, leave_id):
         return JsonResponse({"error": str(e)}, status=400)
 
 
-
-
 def leaves_today(request):
     """List all employees on leave today"""
     if request.method != "GET":
@@ -496,6 +495,7 @@ def leaves_today(request):
 
     return JsonResponse({"leaves_today": result}, status=200)
 
+
 @require_GET
 def list_leaves(request):
     """List all leaves"""
@@ -515,6 +515,7 @@ def list_leaves(request):
         })
 
     return JsonResponse({"leaves": result}, status=200)
+
 
 @csrf_exempt
 def create_payroll(request):
@@ -566,11 +567,6 @@ def create_payroll(request):
     except Exception as e:
         return JsonResponse({"error": str(e)}, status=400)
 
-from django.http import JsonResponse
-from django.views.decorators.csrf import csrf_exempt
-import json
-from django.shortcuts import get_object_or_404
-from .models import Payroll
 
 @csrf_exempt
 def update_payroll_status(request, payroll_id):
@@ -635,6 +631,7 @@ def get_payroll(request, email):
         }
     }, status=200)
 
+
 @require_GET
 def list_payrolls(request):
     """List all payrolls"""
@@ -658,10 +655,6 @@ def list_payrolls(request):
 
     return JsonResponse({"payrolls": result}, status=200)
 
-from django.http import JsonResponse
-from django.views.decorators.http import require_GET, require_http_methods
-from .models import TaskTable, User
-import json
 
 # ----------------------------
 # List all tasks
@@ -764,21 +757,6 @@ def delete_task(request, task_id):
     except TaskTable.DoesNotExist:
         return JsonResponse({"error": "Task not found"}, status=404)
     
-from django.views.decorators.http import require_POST
-from django.http import JsonResponse
-from django.utils import timezone
-import json
-from .models import TaskTable, User
-
-from django.views.decorators.csrf import csrf_exempt
-from django.views.decorators.http import require_POST
-from django.http import JsonResponse
-from django.utils import timezone
-import json
-from .models import TaskTable
-from django.contrib.auth import get_user_model
-
-User = get_user_model()
 
 @csrf_exempt  # <-- Exempt CSRF
 @require_POST
@@ -833,10 +811,6 @@ def create_task(request):
         return JsonResponse({"error": str(e)}, status=500)
 
 
-from rest_framework import generics
-from .serializers import RegisterSerializer
-from .models import User
-
 class RegisterView(generics.CreateAPIView):
     queryset = User.objects.all()
     serializer_class = RegisterSerializer
@@ -859,19 +833,6 @@ def list_attendance(request):
 
     return JsonResponse({"attendance": result}, status=200)
 
-from django.views.decorators.http import require_GET, require_http_methods
-from django.http import JsonResponse
-from django.views.decorators.csrf import csrf_exempt
-from django.utils.dateparse import parse_date
-import json
-from .models import Report
-from django.contrib.auth.decorators import login_required
-
-from django.contrib.auth import get_user_model
-User = get_user_model()
-
-from django.contrib.auth import get_user_model
-User = get_user_model()
 
 @csrf_exempt
 @require_http_methods(["POST"])
@@ -912,6 +873,7 @@ def create_report(request):
     except Exception as e:
         return JsonResponse({"error": str(e)}, status=400)
 
+
 @require_http_methods(["GET"])
 def list_reports(request):
     reports = Report.objects.all().order_by('-date', '-created_at')
@@ -927,7 +889,6 @@ def list_reports(request):
             "created_at": r.created_at.isoformat()
         })
     return JsonResponse({"reports": result})
-
 
 
 @csrf_exempt
@@ -959,6 +920,7 @@ def update_report(request, pk):
     except Exception as e:
         return JsonResponse({"error": str(e)}, status=400)
 
+
 @csrf_exempt
 @require_http_methods(["DELETE"])
 def delete_report(request, pk):
@@ -969,6 +931,7 @@ def delete_report(request, pk):
 
     report.delete()
     return JsonResponse({"message": "Report deleted successfully."}, status=204)
+
 
 @require_http_methods(["GET"])
 def list_projects(request):
@@ -1047,6 +1010,7 @@ def detail_project(request, pk):
     except Project.DoesNotExist:
         return JsonResponse({"error": "Project not found"}, status=404)
 
+
 @csrf_exempt
 @require_http_methods(["PUT"])
 def update_project(request, pk):
@@ -1061,6 +1025,7 @@ def update_project(request, pk):
     except Project.DoesNotExist:
         return JsonResponse({"error": "Project not found"}, status=404)
 
+
 @csrf_exempt
 @require_http_methods(["DELETE"])
 def delete_project(request, pk):
@@ -1071,6 +1036,7 @@ def delete_project(request, pk):
     except Project.DoesNotExist:
         return JsonResponse({"error": "Project not found"}, status=404)
     
+
 @require_http_methods(["GET"])
 def list_notices(request):
     notices = Notice.objects.all().order_by('-posted_date')
@@ -1088,12 +1054,6 @@ def list_notices(request):
         })
     return JsonResponse({"notices": result})
 
-from django.views.decorators.csrf import csrf_exempt
-from django.views.decorators.http import require_http_methods
-from django.http import JsonResponse
-from django.shortcuts import get_object_or_404
-import json
-from .models import Notice, User
 
 @csrf_exempt
 @require_http_methods(["POST"])
@@ -1136,6 +1096,7 @@ def detail_notice(request, pk):
     except Notice.DoesNotExist:
         return JsonResponse({"error": "Notice not found"}, status=404)
 
+
 @csrf_exempt
 @require_http_methods(["PUT"])
 def update_notice(request, pk):
@@ -1151,6 +1112,7 @@ def update_notice(request, pk):
     except Notice.DoesNotExist:
         return JsonResponse({"error": "Notice not found"}, status=404)
 
+
 @csrf_exempt
 @require_http_methods(["DELETE"])
 def delete_notice(request, pk):
@@ -1161,6 +1123,7 @@ def delete_notice(request, pk):
     except Notice.DoesNotExist:
         return JsonResponse({"error": "Notice not found"}, status=404)
     
+
 @api_view(['GET'])
 def get_employee_by_email(request, email):
     try:
@@ -1172,6 +1135,7 @@ def get_employee_by_email(request, email):
         })
     except Employee.DoesNotExist:
         return JsonResponse({"error": "Employee not found"}, status=404)
+
 
 from django.http import JsonResponse
 

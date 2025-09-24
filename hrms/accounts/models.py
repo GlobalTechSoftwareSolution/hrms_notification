@@ -21,6 +21,7 @@ class UserManager(BaseUserManager):
             raise ValueError('Superuser must have is_superuser=True.')
         return self.create_user(email, role, password, **extra_fields)
 
+
 class User(AbstractBaseUser, PermissionsMixin):
     email = models.EmailField(primary_key=True, max_length=254)
     role = models.CharField(max_length=30)
@@ -34,6 +35,7 @@ class User(AbstractBaseUser, PermissionsMixin):
 
     def __str__(self):
         return f"{self.email} ({self.role})"
+
 
 class HR(models.Model):
     email = models.OneToOneField(User, on_delete=models.CASCADE, to_field='email', primary_key=True)
@@ -50,6 +52,7 @@ class HR(models.Model):
     def __str__(self):
         return f"{self.fullname} (HR)"
 
+
 class CEO(models.Model):
     email = models.OneToOneField(User, on_delete=models.CASCADE, to_field='email', primary_key=True)
     fullname = models.CharField(max_length=255)
@@ -64,6 +67,7 @@ class CEO(models.Model):
 
     def __str__(self):
         return f"{self.fullname} (CEO)"
+
 
 class Manager(models.Model):
     email = models.OneToOneField(User, on_delete=models.CASCADE, to_field='email', primary_key=True)
@@ -81,6 +85,7 @@ class Manager(models.Model):
     def __str__(self):
         return f"{self.fullname} (Manager)"
 
+
 class Employee(models.Model):
     email = models.OneToOneField(User, on_delete=models.CASCADE, to_field='email', primary_key=True)
     fullname = models.CharField(max_length=255)
@@ -97,6 +102,7 @@ class Employee(models.Model):
     def __str__(self):
         return f"{self.fullname} (Employee)"
 
+
 class Admin(models.Model):
     email = models.OneToOneField(User, on_delete=models.CASCADE, to_field='email', primary_key=True)
     fullname = models.CharField(max_length=255)
@@ -106,6 +112,7 @@ class Admin(models.Model):
 
     def __str__(self):
         return f"{self.fullname} (Admin)"
+
 
 class Attendance(models.Model):
     id = models.AutoField(primary_key=True)
@@ -143,6 +150,7 @@ class Leave(models.Model):
     def __str__(self):
         return f"{self.email.email} - {self.department} Leave from {self.start_date} to {self.end_date} [{self.status}]"
 
+
 class Payroll(models.Model):
     id = models.AutoField(primary_key=True)
     email = models.ForeignKey(User, on_delete=models.CASCADE, to_field='email')
@@ -171,6 +179,7 @@ class Payroll(models.Model):
     def save(self, *args, **kwargs):
         self.net_salary = (self.basic_salary + self.allowances + self.bonus) - (self.deductions + self.tax)
         super().save(*args, **kwargs)
+
 
 class TaskTable(models.Model):
     task_id = models.AutoField(primary_key=True)
@@ -224,6 +233,7 @@ class TaskTable(models.Model):
     def __str__(self):
         return f"Task: {self.title} for {self.email.email} → {self.status}"
 
+
 class Report(models.Model):
     id = models.AutoField(primary_key=True)
     title = models.CharField(max_length=255)
@@ -250,6 +260,7 @@ class Report(models.Model):
     def __str__(self):
         return f"{self.title} ({self.date}) by {self.email.email if self.email else 'Unknown'}"
     
+
 class Project(models.Model):
     id = models.AutoField(primary_key=True)
     name = models.CharField(max_length=255)
@@ -276,6 +287,7 @@ class Project(models.Model):
 
     def __str__(self):
         return self.name
+
 
 class Notice(models.Model):
     id = models.AutoField(primary_key=True)
