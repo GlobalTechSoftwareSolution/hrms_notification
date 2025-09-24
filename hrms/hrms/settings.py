@@ -102,6 +102,7 @@ CORS_ALLOW_HEADERS = [
 
 # CSRF trusted origins
 CSRF_TRUSTED_ORIGINS = [
+    "http://localhost:3000",
     'https://hrms-6qja.onrender.com',
 ]
 
