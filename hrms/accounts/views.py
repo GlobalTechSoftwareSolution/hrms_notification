@@ -1141,3 +1141,120 @@ from django.http import JsonResponse
 
 def health_check(request):
     return JsonResponse({"status": "ok"})
+
+from django.views.decorators.http import require_GET
+from django.http import JsonResponse
+
+@require_GET
+def get_tasks_by_assigned_by(request, assigned_by_email):
+    try:
+        tasks = TaskTable.objects.filter(assigned_by__email=assigned_by_email)
+        if not tasks.exists():
+            return JsonResponse({"error": "No tasks found for this assigned_by email"}, status=404)
+        
+        data = []
+        for task in tasks:
+            data.append({
+                "task_id": task.task_id,
+                "title": task.title,
+                "description": task.description,
+                "email": task.email.email,
+                "assigned_by": task.assigned_by.email if task.assigned_by else None,
+                "department": task.department,
+                "priority": task.priority,
+                "status": task.status,
+                "start_date": str(task.start_date),
+                "due_date": str(task.due_date) if task.due_date else None,
+                "completed_date": str(task.completed_date) if task.completed_date else None,
+                "created_at": str(task.created_at),
+                "updated_at": str(task.updated_at),
+            })
+        
+        return JsonResponse(data, safe=False, status=200)
+    except Exception as e:
+        return JsonResponse({"error": str(e)}, status=500)
+    
+from rest_framework import generics
+from .models import MyUser
+from .serializers import MyUserSerializer
+
+class MyUserCreateView(generics.CreateAPIView):
+    queryset = MyUser.objects.all()
+    serializer_class = MyUserSerializer
+
+import sys
+import traceback
+import face_recognition
+from django.utils.timezone import now
+from rest_framework.response import Response
+from rest_framework.decorators import api_view
+from .models import MyUser, Attendee
+from PIL import Image
+
+@api_view(['POST'])
+def face_scan_checkin_checkout(request):
+    try:
+        print("FILES received:", request.FILES)
+
+        uploaded_file = request.FILES.get('image')
+        if not uploaded_file:
+            return Response({"error": "No image uploaded"}, status=400)
+
+        uploaded_file.seek(0)
+        img = Image.open(uploaded_file)
+        img.save('debug_test.png')
+
+        uploaded_file.seek(0)
+        image = face_recognition.load_image_file(uploaded_file)
+
+        uploaded_encodings = face_recognition.face_encodings(image, model='hog')
+        if len(uploaded_encodings) == 0:
+            return Response({"error": "No face detected in image"}, status=400)
+
+        uploaded_encoding = uploaded_encodings[0]
+
+        users = MyUser.objects.all()
+        for user in users:
+            if not user.profile:
+                continue
+            try:
+                user_image = face_recognition.load_image_file(user.profile.path)
+                user_encodings = face_recognition.face_encodings(user_image, model='hog')
+                if len(user_encodings) == 0:
+                    continue
+                user_encoding = user_encodings[0]
+
+                match = face_recognition.compare_faces([user_encoding], uploaded_encoding, tolerance=0.5)
+                if match[0]:
+                    # Check if attendee already checked in without checkout
+                    last_attendance = Attendee.objects.filter(user_email=user, check_out__isnull=True).order_by('-check_in').first()
+
+                    if last_attendance:
+                        # User is already checked in, set checkout time
+                        last_attendance.check_out = now()
+                        last_attendance.save()
+                        return Response({
+                            "message": "Check-out successful.",
+                            "username": user.username,
+                            "email": user.email
+                        })
+                    else:
+                        # User not checked in yet, create new check-in
+                        Attendee.objects.create(user_email=user, check_in=now())
+                        return Response({
+                            "message": "Check-in successful.",
+                            "username": user.username,
+                            "email": user.email
+                        })
+
+            except Exception:
+                print(f"Exception processing user {user.email}:", file=sys.stderr)
+                traceback.print_exc()
+                continue
+
+        return Response({"error": "No matching user found"}, status=404)
+
+    except Exception:
+        print("Exception in face_scan_checkin_checkout view:", file=sys.stderr)
+        traceback.print_exc()
+        return Response({"error": "Failed to process uploaded image"}, status=400)

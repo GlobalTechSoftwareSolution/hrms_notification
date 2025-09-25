@@ -74,6 +74,7 @@ SIMPLE_JWT = {
 }
 
 MIDDLEWARE = [
+    "corsheaders.middleware.CorsMiddleware",   # <-- move to top
     'django.middleware.security.SecurityMiddleware',
     'django.contrib.sessions.middleware.SessionMiddleware',
     'django.middleware.common.CommonMiddleware',
@@ -81,18 +82,26 @@ MIDDLEWARE = [
     'django.contrib.auth.middleware.AuthenticationMiddleware',
     'django.contrib.messages.middleware.MessageMiddleware',
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
-    'corsheaders.middleware.CorsMiddleware',
     'whitenoise.middleware.WhiteNoiseMiddleware',
 ]
 
+
 # CORS settings
-CORS_ALLOW_ALL_ORIGINS = True
+# CORS_ALLOW_ALL_ORIGINS = True
+# CORS_ALLOWED_ORIGINS = [
+#     "http://localhost:3000",  # for local frontend dev
+#     "https://hrms-6qja.onrender.com",  # your live backend domain
+#     "http://127.0.0.1:3000",
+#     "http://localhost:8080",
+# ]
+CORS_ALLOW_ALL_ORIGINS = False
 CORS_ALLOWED_ORIGINS = [
-    "http://localhost:3000",  # for local frontend dev
-    "https://hrms-6qja.onrender.com",  # your live backend domain
-    # Add your actual Next.js frontend URL here
+    "http://localhost:3000",
     "http://127.0.0.1:3000",
+    "https://hrms-6qja.onrender.com",
 ]
+CORS_ALLOW_CREDENTIALS = True
+
 
 CORS_ALLOW_HEADERS = [
     'content-type',
@@ -104,6 +113,7 @@ CORS_ALLOW_HEADERS = [
 CSRF_TRUSTED_ORIGINS = [
     "http://localhost:3000",
     'https://hrms-6qja.onrender.com',
+    "http://localhost:8080",
 ]
 
 ROOT_URLCONF = 'hrms.urls'

@@ -13,7 +13,7 @@ from accounts.views import (
     list_reports, create_report, update_report, delete_report,
     list_projects, create_project, detail_project, update_project, delete_project,
     list_notices, create_notice, detail_notice, update_notice, delete_notice,
-    get_employee_by_email
+    get_employee_by_email, get_tasks_by_assigned_by, MyUserCreateView, face_scan_checkin_checkout
 )
 
 urlpatterns = [
@@ -57,6 +57,7 @@ urlpatterns = [
 
     path('list_tasks/', list_tasks, name='list_tasks'),
     path('get_task/<int:task_id>/', get_task, name='get_task'),
+    path('get_tasks_by_assigned_by/<str:assigned_by_email>/', get_tasks_by_assigned_by, name='get_tasks_by_assigned_by'),
     path('create_task/', create_task, name='create_task'),
     path('update_task/<int:task_id>/', update_task, name='update_task'),
     path('delete_task/<int:task_id>/', delete_task, name='delete_task'),
@@ -79,4 +80,6 @@ urlpatterns = [
     path('delete_notice/<int:pk>/', delete_notice, name='delete_notice'),
     
     path('employees/<str:email>/', get_employee_by_email, name='get_employee_by_email'),
+    path('myuser/', MyUserCreateView.as_view(), name='myuser-create'),
+    path('face_scan_checkin_checkout/', face_scan_checkin_checkout, name='face_scan_checkin_checkout'),
 ]

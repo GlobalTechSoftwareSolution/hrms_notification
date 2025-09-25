@@ -6,5 +6,8 @@ def image_to_base64(image_path):
     return encoded_string
 
 # Usage
-base64_image = image_to_base64("C:/Users/Abhishek/Desktop/New_folder/HRMS-BACKEND/hrms/images/abhi.jpg")
-print(base64_image)
+base64_image = image_to_base64("C:/Users/Abhishek/Desktop/New_folder/HRMS-BACKEND/hrms/images/Mani.jpg")
+
+# Store the base64 data in a file
+with open("C:/Users/Abhishek/Desktop/New_folder/HRMS-BACKEND/hrms/images/Mani_base64.txt", "w") as output_file:
+    output_file.write(base64_image)

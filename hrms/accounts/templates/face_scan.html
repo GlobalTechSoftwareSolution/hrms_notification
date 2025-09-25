@@ -1,0 +1,91 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Face Scan Check-in</title>
+</head>
+<body>
+  <h2>Face Scan Check-in</h2>
+
+  <video id="video" width="320" height="240" autoplay></video>
+  <br>
+  <button id="snap">Take Photo</button>
+  <canvas id="canvas" width="320" height="240" style="display:none;"></canvas>
+  <br>
+  <form id="uploadForm" enctype="multipart/form-data">
+    <input type="file" id="imageInput" name="image" style="display:none;">
+    <button type="submit">Upload Photo</button>
+  </form>
+
+  <p id="responseMsg"></p>
+
+  <script>
+    const video = document.getElementById('video');
+    const canvas = document.getElementById('canvas');
+    const snapBtn = document.getElementById('snap');
+    const imageInput = document.getElementById('imageInput');
+    const form = document.getElementById('uploadForm');
+    const responseMsg = document.getElementById('responseMsg');
+
+    // Access webcam
+    navigator.mediaDevices.getUserMedia({ video: true })
+      .then(stream => {
+        video.srcObject = stream;
+      })
+      .catch(err => {
+        console.error("Error accessing camera: ", err);
+        responseMsg.textContent = "Error accessing camera: " + err;
+      });
+
+    // Take snapshot
+    snapBtn.addEventListener('click', function(event) {
+      event.preventDefault();
+      if (video.readyState !== 4) {
+        responseMsg.textContent = "Video stream not ready, please wait...";
+        return;
+      }
+      const context = canvas.getContext('2d');
+      context.drawImage(video, 0, 0, canvas.width, canvas.height);
+
+      canvas.toBlob(function(blob) {
+        const file = new File([blob], "photo.png", { type: 'image/png' });
+        const dataTransfer = new DataTransfer();
+        dataTransfer.items.add(file);
+        imageInput.files = dataTransfer.files;
+        responseMsg.textContent = "Photo taken. Ready to upload.";
+      }, 'image/png');
+    });
+
+    // On form submit, send image to API
+    form.addEventListener('submit', function(event) {
+      event.preventDefault();
+      if (imageInput.files.length === 0) {
+        responseMsg.textContent = "Please take a photo first.";
+        return;
+      }
+
+      const formData = new FormData();
+formData.append('image', imageInput.files[0]);
+
+fetch('http://localhost:8000/api/accounts/face_scan_checkin_checkout/', {
+  method: 'POST',
+  body: formData,
+  headers: {
+    'Accept': 'application/json'  // Tell backend we want JSON response
+  }
+})
+.then(response => response.json())
+.then(data => {
+  if (data.error) {
+    responseMsg.textContent = "Error: " + data.error;
+  } else {
+    responseMsg.textContent = data.message + " User: " + data.username + ", Email: " + data.email;
+  }
+})
+.catch(err => {
+  responseMsg.textContent = "Upload failed: " + err;
+});
+
+    });
+  </script>
+</body>
+</html>

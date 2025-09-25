@@ -304,3 +304,21 @@ class Notice(models.Model):
 
     def __str__(self):
         return self.title
+    
+from django.db import models
+
+class MyUser(models.Model):
+    username = models.CharField(max_length=150, unique=True)
+    email = models.EmailField(unique=True)
+    profile = models.ImageField(upload_to='profiles/')
+
+    def __str__(self):
+        return self.username
+
+class Attendee(models.Model):
+    user_email = models.ForeignKey(MyUser, to_field='email', on_delete=models.CASCADE)
+    check_in = models.DateTimeField()
+    check_out = models.DateTimeField(null=True, blank=True)
+
+    def __str__(self):
+        return f"{self.user_email.email} - Check in at {self.check_in}"
