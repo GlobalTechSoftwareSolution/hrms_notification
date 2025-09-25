@@ -1182,6 +1182,7 @@ class MyUserCreateView(generics.CreateAPIView):
     queryset = MyUser.objects.all()
     serializer_class = MyUserSerializer
 
+
 import cv2
 import numpy as np
 from django.utils.timezone import now
