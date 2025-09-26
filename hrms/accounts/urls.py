@@ -13,7 +13,8 @@ from accounts.views import (
     list_reports, create_report, update_report, delete_report,
     list_projects, create_project, detail_project, update_project, delete_project,
     list_notices, create_notice, detail_notice, update_notice, delete_notice,
-    get_employee_by_email, get_tasks_by_assigned_by, MyUserCreateView, recognize_face, test_page, health_check
+    get_employee_by_email, get_tasks_by_assigned_by, MyUserCreateView, recognize_face, test_page, 
+    health_check, mark_attendance
 )
 
 urlpatterns = [
@@ -84,4 +85,5 @@ urlpatterns = [
     path("recognize_face/", recognize_face, name="recognize_face"),
     path("test/", test_page, name="test_page"),
     path("health/", health_check, name="health_check"),
+    path('mark/', mark_attendance, name='mark-attendance'),
 ]

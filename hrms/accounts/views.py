@@ -1360,3 +1360,76 @@ def test_page(request):
 @require_http_methods(["GET"])
 def health_check(request):
     return JsonResponse({"status": "Face Recognition API is running ✅"})
+
+from rest_framework.decorators import api_view
+from rest_framework.response import Response
+from django.utils import timezone
+from PIL import Image
+import numpy as np
+import cv2
+import os
+from django.conf import settings
+from .models import HR, CEO, Manager, Employee, Admin, Attendance
+
+
+def preprocess_image_for_lbph(pil_image):
+    rgb_image = pil_image.convert('RGB')
+    np_image = np.array(rgb_image)
+    gray_image = cv2.cvtColor(np_image, cv2.COLOR_RGB2GRAY)
+    return gray_image
+
+
+def faces_are_similar(face1_gray, face2_gray, threshold=0.7):
+    hist1 = cv2.calcHist([face1_gray], [0], None, [256], [0, 256])
+    hist2 = cv2.calcHist([face2_gray], [0], None, [256], [0, 256])
+    cv2.normalize(hist1, hist1)
+    cv2.normalize(hist2, hist2)
+    score = cv2.compareHist(hist1, hist2, cv2.HISTCMP_CORREL)
+    return score > threshold
+
+
+@api_view(['POST'])
+def mark_attendance(request):
+    if 'image' not in request.FILES:
+        return Response({'error': 'No image uploaded'}, status=400)
+    
+    try:
+        uploaded_pil_image = Image.open(request.FILES['image'])
+    except Exception:
+        return Response({'error': 'Invalid image file'}, status=400)
+    
+    uploaded_gray = preprocess_image_for_lbph(uploaded_pil_image)
+    matched_user = None
+
+    # Try matching face against all role models
+    for role_model in [HR, CEO, Manager, Employee, Admin]:
+        for person in role_model.objects.exclude(profile_picture=''):
+            try:
+                # Correct path using MEDIA_ROOT + profile_picture.name from DB
+                img_path = os.path.join(settings.MEDIA_ROOT, person.profile_picture.name)
+                stored_pil_image = Image.open(img_path)
+            except Exception:
+                continue
+            stored_gray = preprocess_image_for_lbph(stored_pil_image)
+
+            if faces_are_similar(uploaded_gray, stored_gray):
+                matched_user = person.email
+                break
+        if matched_user:
+            break
+
+    if not matched_user:
+        return Response({'error': 'Face not recognized'}, status=404)
+
+    today = timezone.localdate()
+    attendance, created = Attendance.objects.get_or_create(email=matched_user, date=today)
+
+    current_time = timezone.localtime().time()
+    if not attendance.check_in:
+        attendance.check_in = current_time
+    else:
+        attendance.check_out = current_time
+
+    attendance.save()
+
+    return Response({'message': f'Attendance marked for {matched_user.email}'})
