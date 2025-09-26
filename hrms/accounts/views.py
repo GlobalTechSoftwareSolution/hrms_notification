@@ -212,73 +212,73 @@ else:
     print(f"[WARNING] Known faces directory {KNOWN_FACES_DIR} not found. Skipping face loading.")
 
 
-# Face detector Haar cascade
-face_cascade = cv2.CascadeClassifier(cv2.data.haarcascades + "haarcascade_frontalface_default.xml")
+# # Face detector Haar cascade
+# face_cascade = cv2.CascadeClassifier(cv2.data.haarcascades + "haarcascade_frontalface_default.xml")
 
-@api_view(['POST'])
-@permission_classes([AllowAny])
-def recognize_face(request):
-    data = request.data
-    image_data = data.get("image", "")
-    if not image_data:
-        return JsonResponse({"error": "No image data provided"}, status=400)
+# @api_view(['POST'])
+# @permission_classes([AllowAny])
+# def recognize_face(request):
+#     data = request.data
+#     image_data = data.get("image", "")
+#     if not image_data:
+#         return JsonResponse({"error": "No image data provided"}, status=400)
 
-    if "," in image_data:
-        image_data = image_data.split(",")[1]
+#     if "," in image_data:
+#         image_data = image_data.split(",")[1]
 
-    img_bytes = base64.b64decode(image_data)
-    img = Image.open(BytesIO(img_bytes)).convert('RGB')
-    img_np = np.array(img)
-    gray = cv2.cvtColor(img_np, cv2.COLOR_RGB2GRAY)
+#     img_bytes = base64.b64decode(image_data)
+#     img = Image.open(BytesIO(img_bytes)).convert('RGB')
+#     img_np = np.array(img)
+#     gray = cv2.cvtColor(img_np, cv2.COLOR_RGB2GRAY)
 
-    # Detect faces
-    faces = face_cascade.detectMultiScale(gray, scaleFactor=1.1, minNeighbors=5)
-    if len(faces) == 0:
-        return JsonResponse({"username": "No face detected"}, status=200)
+#     # Detect faces
+#     faces = face_cascade.detectMultiScale(gray, scaleFactor=1.1, minNeighbors=5)
+#     if len(faces) == 0:
+#         return JsonResponse({"username": "No face detected"}, status=200)
 
-    x, y, w, h = faces[0]
-    face_roi = gray[y:y+h, x:x+w]
+#     x, y, w, h = faces[0]
+#     face_roi = gray[y:y+h, x:x+w]
 
-    kp2, des2 = orb.detectAndCompute(face_roi, None)
-    if des2 is None:
-        return JsonResponse({"username": "Unknown", "reason": "No features detected in input face"}, status=200)
+#     kp2, des2 = orb.detectAndCompute(face_roi, None)
+#     if des2 is None:
+#         return JsonResponse({"username": "Unknown", "reason": "No features detected in input face"}, status=200)
 
-    bf = cv2.BFMatcher(cv2.NORM_HAMMING, crossCheck=True)
+#     bf = cv2.BFMatcher(cv2.NORM_HAMMING, crossCheck=True)
 
-    best_match = None
-    best_avg_distance = 100
+#     best_match = None
+#     best_avg_distance = 100
 
-    # Match input face with all known faces
-    for des_known, name in zip(known_face_descriptors, known_face_names):
-        matches = bf.match(des_known, des2)
-        if not matches:
-            continue
-        matches = sorted(matches, key=lambda m: m.distance)
-        avg_distance = sum(m.distance for m in matches) / len(matches)
-        if avg_distance < best_avg_distance:
-            best_avg_distance = avg_distance
-            best_match = name
+#     # Match input face with all known faces
+#     for des_known, name in zip(known_face_descriptors, known_face_names):
+#         matches = bf.match(des_known, des2)
+#         if not matches:
+#             continue
+#         matches = sorted(matches, key=lambda m: m.distance)
+#         avg_distance = sum(m.distance for m in matches) / len(matches)
+#         if avg_distance < best_avg_distance:
+#             best_avg_distance = avg_distance
+#             best_match = name
 
-    threshold = 45  # Tune this threshold based on your tests
+#     threshold = 45  # Tune this threshold based on your tests
 
-    if best_match and best_avg_distance < threshold:
-        username = best_match
-        email = get_email_by_username(username)  # Your existing function
-        confidence = round((1 - (best_avg_distance / threshold)) * 100, 2)
-        attendance = mark_attendance_by_email(email)  # Your existing function
-    else:
-        username = "Unknown"
-        email = None
-        confidence = 0
-        attendance = None
+#     if best_match and best_avg_distance < threshold:
+#         username = best_match
+#         email = get_email_by_username(username)  # Your existing function
+#         confidence = round((1 - (best_avg_distance / threshold)) * 100, 2)
+#         attendance = mark_attendance_by_email(email)  # Your existing function
+#     else:
+#         username = "Unknown"
+#         email = None
+#         confidence = 0
+#         attendance = None
 
-    return JsonResponse({
-        "username": username,
-        "email": email,
-        "confidence": f"{confidence}%" if email else "",
-        "check_in": str(attendance.check_in) if attendance else "",
-        "check_out": str(attendance.check_out) if attendance else ""
-    })
+#     return JsonResponse({
+#         "username": username,
+#         "email": email,
+#         "confidence": f"{confidence}%" if email else "",
+#         "check_in": str(attendance.check_in) if attendance else "",
+#         "check_out": str(attendance.check_out) if attendance else ""
+#     })
 
 
 # =====================
@@ -1182,246 +1182,32 @@ class MyUserCreateView(generics.CreateAPIView):
     queryset = MyUser.objects.all()
     serializer_class = MyUserSerializer
 
-
-# import cv2
-# import numpy as np
-# from django.utils.timezone import now
-# from rest_framework.response import Response
-# from rest_framework.decorators import api_view
-# from .models import MyUser, Attendee
-# from django.core.files.storage import default_storage
-
-# @api_view(['POST'])
-# def face_scan_checkin_checkout(request):
-#     try:
-#         uploaded_file = request.FILES.get('image')
-#         if not uploaded_file:
-#             return Response({"error": "No image uploaded"}, status=400)
-
-#         file_bytes = np.frombuffer(uploaded_file.read(), np.uint8)
-#         uploaded_img = cv2.imdecode(file_bytes, cv2.IMREAD_COLOR)
-#         gray_uploaded = cv2.cvtColor(uploaded_img, cv2.COLOR_BGR2GRAY)
-
-#         face_cascade = cv2.CascadeClassifier(cv2.data.haarcascades + "haarcascade_frontalface_default.xml")
-#         faces = face_cascade.detectMultiScale(gray_uploaded, scaleFactor=1.1, minNeighbors=5)
-#         if len(faces) == 0:
-#             return Response({"error": "No face detected in image"}, status=400)
-
-#         x, y, w, h = faces[0]
-#         uploaded_face = gray_uploaded[y:y+h, x:x+w]
-
-#         users = MyUser.objects.all()
-#         for user in users:
-#             if not user.profile:
-#                 continue
-
-#             try:
-#                 profile_path = default_storage.path(user.profile.name)
-#                 profile_img = cv2.imread(profile_path)
-#                 if profile_img is None:
-#                     continue
-#                 gray_profile = cv2.cvtColor(profile_img, cv2.COLOR_BGR2GRAY)
-
-#                 profile_faces = face_cascade.detectMultiScale(gray_profile, scaleFactor=1.1, minNeighbors=5)
-#                 if len(profile_faces) == 0:
-#                     continue
-
-#                 px, py, pw, ph = profile_faces[0]
-#                 profile_face = gray_profile[py:py+ph, px:px+pw]
-
-#                 resized_uploaded = cv2.resize(uploaded_face, (pw, ph))
-#                 res = cv2.matchTemplate(profile_face, resized_uploaded, cv2.TM_CCOEFF_NORMED)
-#                 _, max_val, _, _ = cv2.minMaxLoc(res)
-
-#                 if max_val > 0.6:
-#                     # Fetch the user's attendance record
-#                     attendance = Attendee.objects.filter(user_email=user).first()
-
-#                     if attendance is None:
-#                         # No attendance record exists → create check-in
-#                         Attendee.objects.create(user_email=user, check_in=now())
-#                         return Response({
-#                             "message": "Check-in successful.",
-#                             "username": user.username,
-#                             "email": user.email
-#                         })
-#                     elif attendance.check_out is None:
-#                         # Checked in but not checked out → allow check-out
-#                         attendance.check_out = now()
-#                         attendance.save()
-#                         return Response({
-#                             "message": "Check-out successful.",
-#                             "username": user.username,
-#                             "email": user.email
-#                         })
-#                     else:
-#                         # Already checked in and checked out → no further action
-#                         return Response({
-#                             "message": "You have already completed check-in and check-out today.",
-#                             "username": user.username,
-#                             "email": user.email
-#                         })
-
-#             except Exception as e:
-#                 print(f"Exception processing user {user.email}: {e}")
-#                 continue
-
-#         return Response({"error": "No matching user found"}, status=404)
-
-#     except Exception as e:
-#         print("Exception in face_scan_checkin_checkout view:", e)
-#         return Response({"error": "Failed to process uploaded image"}, status=400)
-
-# from django.conf import settings
-# from django.utils.timezone import now
-# from rest_framework.decorators import api_view
-# from rest_framework.response import Response
-# from django.core.files.storage import default_storage
-# import cv2
-# import numpy as np
-# from PIL import Image
-# import os
-# from .models import Attendee, Admin, HR, Manager, Employee, CEO
-
-# # List of all user models
-# USER_MODELS = [Admin, HR, Manager, Employee, CEO]
-
-# def load_image_cv2(image_path):
-#     """
-#     Safely load an image using Pillow and convert to OpenCV format.
-#     Handles JPG, PNG, WEBP, etc.
-#     """
-#     try:
-#         pil_img = Image.open(image_path).convert("RGB")
-#         cv_img = cv2.cvtColor(np.array(pil_img), cv2.COLOR_RGB2BGR)
-#         return cv_img
-#     except Exception as e:
-#         print(f"Failed to load image {image_path}: {e}")
-#         return None
-
-# @api_view(['POST'])
-# def face_scan_checkin_checkout(request):
-#     try:
-#         uploaded_file = request.FILES.get('image')
-#         if not uploaded_file:
-#             return Response({"error": "No image uploaded"}, status=400)
-
-#         # Convert uploaded file to OpenCV format
-#         file_bytes = np.frombuffer(uploaded_file.read(), np.uint8)
-#         uploaded_img = cv2.imdecode(file_bytes, cv2.IMREAD_COLOR)
-#         if uploaded_img is None:
-#             return Response({"error": "Invalid uploaded image"}, status=400)
-
-#         gray_uploaded = cv2.cvtColor(uploaded_img, cv2.COLOR_BGR2GRAY)
-
-#         # Initialize face detector
-#         face_cascade = cv2.CascadeClassifier(cv2.data.haarcascades + "haarcascade_frontalface_default.xml")
-#         faces = face_cascade.detectMultiScale(gray_uploaded, scaleFactor=1.1, minNeighbors=5)
-#         if len(faces) == 0:
-#             return Response({"error": "No face detected in uploaded image"}, status=400)
-
-#         x, y, w, h = faces[0]
-#         uploaded_face = gray_uploaded[y:y+h, x:x+w]
-
-#         # Iterate through all models
-#         for model in USER_MODELS:
-#             users = model.objects.all()
-#             for user in users:
-#                 profile_img_field = getattr(user, 'profile_picture', None)
-#                 if not profile_img_field:
-#                     continue
-
-#                 try:
-#                     # Build full file path using MEDIA_ROOT
-#                     profile_path = os.path.join(settings.MEDIA_ROOT, profile_img_field.name)
-#                     if not os.path.exists(profile_path):
-#                         print(f"File not found: {profile_path}")
-#                         continue
-
-#                     profile_img = load_image_cv2(profile_path)
-#                     if profile_img is None:
-#                         continue
-
-#                     gray_profile = cv2.cvtColor(profile_img, cv2.COLOR_BGR2GRAY)
-#                     profile_faces = face_cascade.detectMultiScale(gray_profile, scaleFactor=1.1, minNeighbors=5)
-#                     if len(profile_faces) == 0:
-#                         continue
-
-#                     px, py, pw, ph = profile_faces[0]
-#                     profile_face = gray_profile[py:py+ph, px:px+pw]
-
-#                     # Resize uploaded face to match profile face size
-#                     resized_uploaded = cv2.resize(uploaded_face, (pw, ph))
-
-#                     # Compare using normalized cross-correlation
-#                     res = cv2.matchTemplate(profile_face, resized_uploaded, cv2.TM_CCOEFF_NORMED)
-#                     _, max_val, _, _ = cv2.minMaxLoc(res)
-
-#                     # If similarity > threshold, consider a match
-#                     if max_val > 0.6:
-#                         # Fetch attendance record
-#                         attendance = Attendee.objects.filter(user_email=user.email).first()
-#                         if attendance is None:
-#                             # Check-in
-#                             Attendee.objects.create(user_email=user.email, check_in=now())
-#                             return Response({
-#                                 "message": "Check-in successful",
-#                                 "fullname": user.fullname,
-#                                 "role": model.__name__,
-#                                 "email": user.email
-#                             })
-#                         elif attendance.check_out is None:
-#                             # Check-out
-#                             attendance.check_out = now()
-#                             attendance.save()
-#                             return Response({
-#                                 "message": "Check-out successful",
-#                                 "fullname": user.fullname,
-#                                 "role": model.__name__,
-#                                 "email": user.email
-#                             })
-#                         else:
-#                             # Already checked in and out
-#                             return Response({
-#                                 "message": "You have already completed check-in and check-out today",
-#                                 "fullname": user.fullname,
-#                                 "role": model.__name__,
-#                                 "email": user.email
-#                             })
-
-#                 except Exception as e:
-#                     print(f"Exception processing user {user.email}: {e}")
-#                     continue
-
-#         return Response({"error": "No matching user found"}, status=404)
-
-#     except Exception as e:
-#         print("Exception in face_scan_checkin_checkout view:", e)
-#         return Response({"error": "Failed to process uploaded image"}, status=400)
-
-
-# accounts/views.py
 import os
 import io
 import base64
-import cv2
-import numpy as np
 from PIL import Image
-from django.http import JsonResponse
+import numpy as np
+import cv2
+import json
+from django.http import JsonResponse, HttpResponse
 from django.views.decorators.csrf import csrf_exempt
+from django.views.decorators.http import require_http_methods
 
 # Config
-KNOWN_DIR = os.path.join(os.path.dirname(__file__), "known_faces")
+BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(_file_)))
+KNOWN_DIR = os.path.join(BASE_DIR, "face", "known_faces")
 HAAR_PATH = cv2.data.haarcascades + "haarcascade_frontalface_default.xml"
+
 face_cascade = cv2.CascadeClassifier(HAAR_PATH)
 orb = cv2.ORB_create(nfeatures=500)
 bf = cv2.BFMatcher(cv2.NORM_HAMMING, crossCheck=True)
-
 known_descriptors = []
 
+# Load known faces
 def load_known_faces():
     if not os.path.isdir(KNOWN_DIR):
         os.makedirs(KNOWN_DIR, exist_ok=True)
+        print(f"[INFO] Created known faces dir: {KNOWN_DIR}")
         return
 
     for fname in os.listdir(KNOWN_DIR):
@@ -1429,20 +1215,23 @@ def load_known_faces():
             continue
         path = os.path.join(KNOWN_DIR, fname)
         base = os.path.splitext(fname)[0]
-        parts = base.split("__")   # <-- FIX: was split("")
+        parts = base.split("")
         username = parts[0] if len(parts) > 0 else base
         email = parts[1] if len(parts) > 1 else ""
         img = cv2.imread(path, cv2.IMREAD_GRAYSCALE)
         if img is None:
             continue
-        faces = face_cascade.detectMultiScale(img, 1.1, 4, minSize=(30,30))
-        crop = img
+        faces = face_cascade.detectMultiScale(img, scaleFactor=1.1, minNeighbors=4, minSize=(30,30))
         if len(faces) > 0:
-            x,y,w,h = faces[0]
+            # Take the first detected face
+            x, y, w, h = faces[0]
             crop = img[y:y+h, x:x+w]
+        else:
+            crop = img  # fallback to full image
         kp, des = orb.detectAndCompute(crop, None)
         if des is not None:
             known_descriptors.append((des, username.lower(), email.lower()))
+            print(f"[INFO] Loaded known face: {username} ({email})")
 
 load_known_faces()
 
@@ -1456,59 +1245,108 @@ def decode_base64_image(data_url):
     return cv2.cvtColor(np.array(img), cv2.COLOR_RGB2BGR)
 
 @csrf_exempt
+@require_http_methods(["POST"])
 def recognize_face(request):
-    if request.method != "POST":
-        return JsonResponse({"error": "POST required"}, status=405)
+    # Handle uploaded file
+    if request.FILES.get("file"):
+        file = request.FILES["file"]
+        img = Image.open(file).convert("RGB")
+        img_bgr = cv2.cvtColor(np.array(img), cv2.COLOR_RGB2BGR)
+        input_username = request.POST.get("username", "").lower()
+        input_email = request.POST.get("email", "").lower()
+    else:
+        # Base64 fallback
+        try:
+            data = json.loads(request.body)
+        except Exception:
+            return JsonResponse({"error": "Invalid JSON"}, status=400)
+        img_b64 = data.get("image")
+        input_username = data.get("username", "").lower()
+        input_email = data.get("email", "").lower()
+        if not img_b64:
+            return JsonResponse({"error": "No image provided"}, status=400)
+        img_bgr = decode_base64_image(img_b64)
 
-    # JSON body
-    try:
-        data = json.loads(request.body)
-    except Exception:
-        return JsonResponse({"error": "Invalid JSON"}, status=400)
-
-    img_b64 = data.get("image")
-    if not img_b64:
-        return JsonResponse({"error": "No image provided"}, status=400)
-
-    img_bgr = decode_base64_image(img_b64)
     gray = cv2.cvtColor(img_bgr, cv2.COLOR_BGR2GRAY)
-
-    faces = face_cascade.detectMultiScale(gray, 1.1, 4, minSize=(40,40))
+    faces = face_cascade.detectMultiScale(gray, scaleFactor=1.1, minNeighbors=4, minSize=(40,40))
     if len(faces) == 0:
         return JsonResponse({"recognized": False, "message": "No face detected"})
 
     x,y,w,h = faces[0]
     face_roi = gray[y:y+h, x:x+w]
-
     kp2, des2 = orb.detectAndCompute(face_roi, None)
     if des2 is None:
-        return JsonResponse({"recognized": False, "message": "No features found"})
+        return JsonResponse({"recognized": False, "message": "No features found in face"})
 
+    # Compare descriptors
     best_name, best_email, best_score = None, None, float("inf")
     for des_known, name, email in known_descriptors:
         try:
             matches = bf.match(des_known, des2)
-        except:
+        except Exception:
             continue
         if not matches:
             continue
-        avg = sum(m.distance for m in matches) / len(matches)
+        matches = sorted(matches, key=lambda m: m.distance)
+        avg = sum(m.distance for m in matches)/len(matches)
         if avg < best_score:
             best_score = avg
-            best_name, best_email = name, email
+            best_name = name
+            best_email = email
 
     THRESHOLD = 50
     if best_name and best_score < THRESHOLD:
-        return JsonResponse({
-            "recognized": True,
-            "username": best_name,
-            "email": best_email,
-            "score": float(best_score),
-        })
+        return JsonResponse({"recognized": True, "username": best_name, "email": best_email, "score": float(best_score)})
     else:
-        return JsonResponse({
-            "recognized": False,
-            "message": "Unknown person",
-            "best_guess": best_name or "",
-            "score": float(best_score) if best_name else None,
-        })
+        return JsonResponse({"recognized": False, "message": "Unknown person", "best_guess": best_name or "", "score": float(best_score) if best_name else None})
+
+@require_http_methods(["GET"])
+def test_page(request):
+    html = """
+    <html>
+    <body>
+        <h1>Face Recognition Test</h1>
+        <input type="file" id="imgInput" accept="image/*"/>
+        <button onclick="sendImage()">Recognize</button>
+        <pre id="result"></pre>
+
+        <script>
+        async function sendImage() {
+            const file = document.getElementById("imgInput").files[0];
+            if (!file) {
+                alert("Please select a file first");
+                return;
+            }
+
+            const formData = new FormData();
+            formData.append("file", file);
+            formData.append("username", "mani");  // optional
+            formData.append("email", "mani@gmail.com"); // optional
+
+            try {
+                const res = await fetch("/face/recognize_face/", {
+                    method: "POST",
+                    body: formData
+                });
+
+                if (!res.ok) {
+                    document.getElementById("result").innerText = "Server error: " + res.status;
+                    return;
+                }
+
+                const data = await res.json();
+                document.getElementById("result").innerText = JSON.stringify(data, null, 2);
+            } catch (err) {
+                document.getElementById("result").innerText = "Fetch error: " + err;
+            }
+        }
+        </script>
+    </body>
+    </html>
+    """
+    return HttpResponse(html)
+
+
+@require_http_methods(["GET"])
+def health_check(request):
+    return JsonResponse({"status": "Face Recognition API is running ✅"})

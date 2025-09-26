@@ -13,7 +13,7 @@ from accounts.views import (
     list_reports, create_report, update_report, delete_report,
     list_projects, create_project, detail_project, update_project, delete_project,
     list_notices, create_notice, detail_notice, update_notice, delete_notice,
-    get_employee_by_email, get_tasks_by_assigned_by, MyUserCreateView, face_scan_checkin_checkout
+    get_employee_by_email, get_tasks_by_assigned_by, MyUserCreateView, recognize_face, test_page
 )
 
 urlpatterns = [
@@ -81,5 +81,6 @@ urlpatterns = [
     
     path('employees/<str:email>/', get_employee_by_email, name='get_employee_by_email'),
     path('myuser/', MyUserCreateView.as_view(), name='myuser-create'),
-    path('face_scan_checkin_checkout/', face_scan_checkin_checkout, name='face_scan_checkin_checkout'),
+    path("recognize_face/", recognize_face, name="recognize_face"),
+    path("test/", test_page, name="test_page"),
 ]

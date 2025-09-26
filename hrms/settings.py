@@ -81,6 +81,7 @@ SIMPLE_JWT = {
 
 
 MIDDLEWARE = [
+    'corsheaders.middleware.CorsMiddleware',
     'django.middleware.security.SecurityMiddleware',
     'django.contrib.sessions.middleware.SessionMiddleware',
     'django.middleware.common.CommonMiddleware',
@@ -88,16 +89,16 @@ MIDDLEWARE = [
     'django.contrib.auth.middleware.AuthenticationMiddleware',
     'django.contrib.messages.middleware.MessageMiddleware',
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
-    'corsheaders.middleware.CorsMiddleware',
 ]
 
 # CORS settings
 CORS_ALLOW_ALL_ORIGINS = True
 CORS_ALLOWED_ORIGINS = [
-    "http://localhost:3000",  # for local frontend dev
-    "https://hrms-backend-44ik.onrender.com",  # your live backend domain
-    # Add your actual Next.js frontend URL here
+    "http://localhost:3000",
+    "https://hrms-backend-44ik.onrender.com",  
     "http://127.0.0.1:3000",
+    "https://corehr-eta.vercel.app",
+    "https://corehr.netlify.app",
 ]
 
 CORS_ALLOW_HEADERS = [
@@ -108,7 +109,11 @@ CORS_ALLOW_HEADERS = [
 
 # CSRF trusted origins
 CSRF_TRUSTED_ORIGINS = [
-    'https://hrms-backend-44ik.onrender.com',
+    "http://localhost:3000",
+    "https://hrms-backend-44ik.onrender.com",  
+    "http://127.0.0.1:3000",
+    "https://corehr-eta.vercel.app",
+    "https://corehr.netlify.app",
 ]
 
 ROOT_URLCONF = 'hrms.urls'
