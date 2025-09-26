@@ -1198,19 +1198,15 @@ def face_scan_checkin_checkout(request):
         if not uploaded_file:
             return Response({"error": "No image uploaded"}, status=400)
 
-        # Read uploaded image into OpenCV format
         file_bytes = np.frombuffer(uploaded_file.read(), np.uint8)
         uploaded_img = cv2.imdecode(file_bytes, cv2.IMREAD_COLOR)
         gray_uploaded = cv2.cvtColor(uploaded_img, cv2.COLOR_BGR2GRAY)
 
-        # Load OpenCV Haar cascade for face detection
         face_cascade = cv2.CascadeClassifier(cv2.data.haarcascades + "haarcascade_frontalface_default.xml")
-
         faces = face_cascade.detectMultiScale(gray_uploaded, scaleFactor=1.1, minNeighbors=5)
         if len(faces) == 0:
             return Response({"error": "No face detected in image"}, status=400)
 
-        # For simplicity, take the first detected face
         x, y, w, h = faces[0]
         uploaded_face = gray_uploaded[y:y+h, x:x+w]
 
@@ -1219,7 +1215,6 @@ def face_scan_checkin_checkout(request):
             if not user.profile:
                 continue
 
-            # Load user's stored profile image
             try:
                 profile_path = default_storage.path(user.profile.name)
                 profile_img = cv2.imread(profile_path)
@@ -1227,36 +1222,42 @@ def face_scan_checkin_checkout(request):
                     continue
                 gray_profile = cv2.cvtColor(profile_img, cv2.COLOR_BGR2GRAY)
 
-                # Detect face in profile image
                 profile_faces = face_cascade.detectMultiScale(gray_profile, scaleFactor=1.1, minNeighbors=5)
                 if len(profile_faces) == 0:
                     continue
+
                 px, py, pw, ph = profile_faces[0]
                 profile_face = gray_profile[py:py+ph, px:px+pw]
 
-                # Resize uploaded face to match profile face size
                 resized_uploaded = cv2.resize(uploaded_face, (pw, ph))
-
-                # Compare using normalized cross-correlation (template matching)
                 res = cv2.matchTemplate(profile_face, resized_uploaded, cv2.TM_CCOEFF_NORMED)
                 _, max_val, _, _ = cv2.minMaxLoc(res)
 
-                # If similarity > threshold, consider a match
                 if max_val > 0.6:
-                    # Check if attendee already checked in without checkout
-                    last_attendance = Attendee.objects.filter(user_email=user, check_out__isnull=True).order_by('-check_in').first()
-                    if last_attendance:
-                        last_attendance.check_out = now()
-                        last_attendance.save()
+                    # Fetch the user's attendance record
+                    attendance = Attendee.objects.filter(user_email=user).first()
+
+                    if attendance is None:
+                        # No attendance record exists → create check-in
+                        Attendee.objects.create(user_email=user, check_in=now())
+                        return Response({
+                            "message": "Check-in successful.",
+                            "username": user.username,
+                            "email": user.email
+                        })
+                    elif attendance.check_out is None:
+                        # Checked in but not checked out → allow check-out
+                        attendance.check_out = now()
+                        attendance.save()
                         return Response({
                             "message": "Check-out successful.",
                             "username": user.username,
                             "email": user.email
                         })
                     else:
-                        Attendee.objects.create(user_email=user, check_in=now())
+                        # Already checked in and checked out → no further action
                         return Response({
-                            "message": "Check-in successful.",
+                            "message": "You have already completed check-in and check-out today.",
                             "username": user.username,
                             "email": user.email
                         })
@@ -1270,3 +1271,131 @@ def face_scan_checkin_checkout(request):
     except Exception as e:
         print("Exception in face_scan_checkin_checkout view:", e)
         return Response({"error": "Failed to process uploaded image"}, status=400)
+
+# from django.conf import settings
+# from django.utils.timezone import now
+# from rest_framework.decorators import api_view
+# from rest_framework.response import Response
+# from django.core.files.storage import default_storage
+# import cv2
+# import numpy as np
+# from PIL import Image
+# import os
+# from .models import Attendee, Admin, HR, Manager, Employee, CEO
+
+# # List of all user models
+# USER_MODELS = [Admin, HR, Manager, Employee, CEO]
+
+# def load_image_cv2(image_path):
+#     """
+#     Safely load an image using Pillow and convert to OpenCV format.
+#     Handles JPG, PNG, WEBP, etc.
+#     """
+#     try:
+#         pil_img = Image.open(image_path).convert("RGB")
+#         cv_img = cv2.cvtColor(np.array(pil_img), cv2.COLOR_RGB2BGR)
+#         return cv_img
+#     except Exception as e:
+#         print(f"Failed to load image {image_path}: {e}")
+#         return None
+
+# @api_view(['POST'])
+# def face_scan_checkin_checkout(request):
+#     try:
+#         uploaded_file = request.FILES.get('image')
+#         if not uploaded_file:
+#             return Response({"error": "No image uploaded"}, status=400)
+
+#         # Convert uploaded file to OpenCV format
+#         file_bytes = np.frombuffer(uploaded_file.read(), np.uint8)
+#         uploaded_img = cv2.imdecode(file_bytes, cv2.IMREAD_COLOR)
+#         if uploaded_img is None:
+#             return Response({"error": "Invalid uploaded image"}, status=400)
+
+#         gray_uploaded = cv2.cvtColor(uploaded_img, cv2.COLOR_BGR2GRAY)
+
+#         # Initialize face detector
+#         face_cascade = cv2.CascadeClassifier(cv2.data.haarcascades + "haarcascade_frontalface_default.xml")
+#         faces = face_cascade.detectMultiScale(gray_uploaded, scaleFactor=1.1, minNeighbors=5)
+#         if len(faces) == 0:
+#             return Response({"error": "No face detected in uploaded image"}, status=400)
+
+#         x, y, w, h = faces[0]
+#         uploaded_face = gray_uploaded[y:y+h, x:x+w]
+
+#         # Iterate through all models
+#         for model in USER_MODELS:
+#             users = model.objects.all()
+#             for user in users:
+#                 profile_img_field = getattr(user, 'profile_picture', None)
+#                 if not profile_img_field:
+#                     continue
+
+#                 try:
+#                     # Build full file path using MEDIA_ROOT
+#                     profile_path = os.path.join(settings.MEDIA_ROOT, profile_img_field.name)
+#                     if not os.path.exists(profile_path):
+#                         print(f"File not found: {profile_path}")
+#                         continue
+
+#                     profile_img = load_image_cv2(profile_path)
+#                     if profile_img is None:
+#                         continue
+
+#                     gray_profile = cv2.cvtColor(profile_img, cv2.COLOR_BGR2GRAY)
+#                     profile_faces = face_cascade.detectMultiScale(gray_profile, scaleFactor=1.1, minNeighbors=5)
+#                     if len(profile_faces) == 0:
+#                         continue
+
+#                     px, py, pw, ph = profile_faces[0]
+#                     profile_face = gray_profile[py:py+ph, px:px+pw]
+
+#                     # Resize uploaded face to match profile face size
+#                     resized_uploaded = cv2.resize(uploaded_face, (pw, ph))
+
+#                     # Compare using normalized cross-correlation
+#                     res = cv2.matchTemplate(profile_face, resized_uploaded, cv2.TM_CCOEFF_NORMED)
+#                     _, max_val, _, _ = cv2.minMaxLoc(res)
+
+#                     # If similarity > threshold, consider a match
+#                     if max_val > 0.6:
+#                         # Fetch attendance record
+#                         attendance = Attendee.objects.filter(user_email=user.email).first()
+#                         if attendance is None:
+#                             # Check-in
+#                             Attendee.objects.create(user_email=user.email, check_in=now())
+#                             return Response({
+#                                 "message": "Check-in successful",
+#                                 "fullname": user.fullname,
+#                                 "role": model.__name__,
+#                                 "email": user.email
+#                             })
+#                         elif attendance.check_out is None:
+#                             # Check-out
+#                             attendance.check_out = now()
+#                             attendance.save()
+#                             return Response({
+#                                 "message": "Check-out successful",
+#                                 "fullname": user.fullname,
+#                                 "role": model.__name__,
+#                                 "email": user.email
+#                             })
+#                         else:
+#                             # Already checked in and out
+#                             return Response({
+#                                 "message": "You have already completed check-in and check-out today",
+#                                 "fullname": user.fullname,
+#                                 "role": model.__name__,
+#                                 "email": user.email
+#                             })
+
+#                 except Exception as e:
+#                     print(f"Exception processing user {user.email}: {e}")
+#                     continue
+
+#         return Response({"error": "No matching user found"}, status=404)
+
+#     except Exception as e:
+#         print("Exception in face_scan_checkin_checkout view:", e)
+#         return Response({"error": "Failed to process uploaded image"}, status=400)
+
