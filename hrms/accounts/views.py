@@ -1215,7 +1215,7 @@ def load_known_faces():
             continue
         path = os.path.join(KNOWN_DIR, fname)
         base = os.path.splitext(fname)[0]
-        parts = base.split("")
+        parts = base.split("__")
         username = parts[0] if len(parts) > 0 else base
         email = parts[1] if len(parts) > 1 else ""
         img = cv2.imread(path, cv2.IMREAD_GRAYSCALE)
