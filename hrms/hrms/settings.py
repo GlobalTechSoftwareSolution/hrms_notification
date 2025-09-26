@@ -98,6 +98,7 @@ CORS_ALLOW_ALL_ORIGINS = False
 CORS_ALLOWED_ORIGINS = [
     "http://localhost:3000",
     "http://127.0.0.1:3000",
+    "http://127.0.0.1:8000",
     "https://corehr-eta.vercel.app",
     "https://hrms-6qja.onrender.com",
 ]
@@ -114,8 +115,9 @@ CORS_ALLOW_HEADERS = [
 CSRF_TRUSTED_ORIGINS = [
     "http://localhost:3000",
     'https://hrms-6qja.onrender.com',
-    "https://corehr-eta.vercel.app",
+    "https://corehr-eta.vercel.app/",
     "http://localhost:8080",
+    "http://127.0.0.1:8000",
 ]
 
 ROOT_URLCONF = 'hrms.urls'

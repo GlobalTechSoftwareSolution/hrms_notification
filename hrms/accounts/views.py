@@ -1182,6 +1182,7 @@ class MyUserCreateView(generics.CreateAPIView):
     queryset = MyUser.objects.all()
     serializer_class = MyUserSerializer
 
+
 import os
 import io
 import base64
@@ -1193,7 +1194,7 @@ from django.http import JsonResponse, HttpResponse
 from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_http_methods
 
-# Config
+# ---------------- CONFIG ----------------
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 KNOWN_DIR = os.path.join(BASE_DIR, "face", "known_faces")
 HAAR_PATH = cv2.data.haarcascades + "haarcascade_frontalface_default.xml"
@@ -1203,7 +1204,7 @@ orb = cv2.ORB_create(nfeatures=500)
 bf = cv2.BFMatcher(cv2.NORM_HAMMING, crossCheck=True)
 known_descriptors = []
 
-# Load known faces
+# ---------------- LOAD KNOWN FACES ----------------
 def load_known_faces():
     if not os.path.isdir(KNOWN_DIR):
         os.makedirs(KNOWN_DIR, exist_ok=True)
@@ -1222,12 +1223,10 @@ def load_known_faces():
         if img is None:
             continue
         faces = face_cascade.detectMultiScale(img, scaleFactor=1.1, minNeighbors=4, minSize=(30,30))
+        crop = img
         if len(faces) > 0:
-            # Take the first detected face
             x, y, w, h = faces[0]
             crop = img[y:y+h, x:x+w]
-        else:
-            crop = img  # fallback to full image
         kp, des = orb.detectAndCompute(crop, None)
         if des is not None:
             known_descriptors.append((des, username.lower(), email.lower()))
@@ -1235,6 +1234,7 @@ def load_known_faces():
 
 load_known_faces()
 
+# ---------------- UTIL ----------------
 def decode_base64_image(data_url):
     if "," in data_url:
         _, b64 = data_url.split(",", 1)
@@ -1244,62 +1244,74 @@ def decode_base64_image(data_url):
     img = Image.open(io.BytesIO(raw)).convert("RGB")
     return cv2.cvtColor(np.array(img), cv2.COLOR_RGB2BGR)
 
+# ---------------- FACE RECOGNITION ----------------
 @csrf_exempt
 @require_http_methods(["POST"])
 def recognize_face(request):
-    # Handle uploaded file
-    if request.FILES.get("file"):
-        file = request.FILES["file"]
-        img = Image.open(file).convert("RGB")
-        img_bgr = cv2.cvtColor(np.array(img), cv2.COLOR_RGB2BGR)
-        input_username = request.POST.get("username", "").lower()
-        input_email = request.POST.get("email", "").lower()
-    else:
-        # Base64 fallback
-        try:
+    try:
+        # Uploaded file
+        if request.FILES.get("file"):
+            file = request.FILES["file"]
+            img = Image.open(file).convert("RGB")
+            img_bgr = cv2.cvtColor(np.array(img), cv2.COLOR_RGB2BGR)
+            input_username = request.POST.get("username", "").lower()
+            input_email = request.POST.get("email", "").lower()
+        else:
+            # Base64 fallback
             data = json.loads(request.body)
-        except Exception:
-            return JsonResponse({"error": "Invalid JSON"}, status=400)
-        img_b64 = data.get("image")
-        input_username = data.get("username", "").lower()
-        input_email = data.get("email", "").lower()
-        if not img_b64:
-            return JsonResponse({"error": "No image provided"}, status=400)
-        img_bgr = decode_base64_image(img_b64)
+            img_b64 = data.get("image")
+            input_username = data.get("username", "").lower()
+            input_email = data.get("email", "").lower()
+            if not img_b64:
+                return JsonResponse({"error": "No image provided"}, status=400)
+            img_bgr = decode_base64_image(img_b64)
 
-    gray = cv2.cvtColor(img_bgr, cv2.COLOR_BGR2GRAY)
-    faces = face_cascade.detectMultiScale(gray, scaleFactor=1.1, minNeighbors=4, minSize=(40,40))
-    if len(faces) == 0:
-        return JsonResponse({"recognized": False, "message": "No face detected"})
+        gray = cv2.cvtColor(img_bgr, cv2.COLOR_BGR2GRAY)
+        faces = face_cascade.detectMultiScale(gray, scaleFactor=1.1, minNeighbors=4, minSize=(40,40))
+        if len(faces) == 0:
+            return JsonResponse({"recognized": False, "message": "No face detected"})
 
-    x,y,w,h = faces[0]
-    face_roi = gray[y:y+h, x:x+w]
-    kp2, des2 = orb.detectAndCompute(face_roi, None)
-    if des2 is None:
-        return JsonResponse({"recognized": False, "message": "No features found in face"})
+        x, y, w, h = faces[0]
+        face_roi = gray[y:y+h, x:x+w]
+        kp2, des2 = orb.detectAndCompute(face_roi, None)
+        if des2 is None:
+            return JsonResponse({"recognized": False, "message": "No features found in face"})
 
-    # Compare descriptors
-    best_name, best_email, best_score = None, None, float("inf")
-    for des_known, name, email in known_descriptors:
-        try:
-            matches = bf.match(des_known, des2)
-        except Exception:
-            continue
-        if not matches:
-            continue
-        matches = sorted(matches, key=lambda m: m.distance)
-        avg = sum(m.distance for m in matches)/len(matches)
-        if avg < best_score:
-            best_score = avg
-            best_name = name
-            best_email = email
+        # Compare descriptors
+        best_name, best_email, best_score = None, None, float("inf")
+        for des_known, name, email in known_descriptors:
+            try:
+                matches = bf.match(des_known, des2)
+            except Exception:
+                continue
+            if not matches:
+                continue
+            avg = np.mean([m.distance for m in matches])
+            if avg < best_score:
+                best_score = avg
+                best_name = name
+                best_email = email
 
-    THRESHOLD = 50
-    if best_name and best_score < THRESHOLD:
-        return JsonResponse({"recognized": True, "username": best_name, "email": best_email, "score": float(best_score)})
-    else:
-        return JsonResponse({"recognized": False, "message": "Unknown person", "best_guess": best_name or "", "score": float(best_score) if best_name else None})
+        THRESHOLD = 50
+        if best_name and best_score < THRESHOLD:
+            return JsonResponse({
+                "recognized": True,
+                "username": best_name,
+                "email": best_email,
+                "score": float(best_score)
+            })
 
+        return JsonResponse({
+            "recognized": False,
+            "message": "Unknown person",
+            "best_guess": best_name or "",
+            "score": float(best_score) if best_name else None
+        })
+
+    except Exception as e:
+        return JsonResponse({"error": str(e)}, status=500)
+
+# ---------------- TEST PAGE ----------------
 @require_http_methods(["GET"])
 def test_page(request):
     html = """
@@ -1313,10 +1325,7 @@ def test_page(request):
         <script>
         async function sendImage() {
             const file = document.getElementById("imgInput").files[0];
-            if (!file) {
-                alert("Please select a file first");
-                return;
-            }
+            if (!file) { alert("Please select a file first"); return; }
 
             const formData = new FormData();
             formData.append("file", file);
@@ -1324,18 +1333,19 @@ def test_page(request):
             formData.append("email", "mani@gmail.com"); // optional
 
             try {
-                const res = await fetch("/face/recognize_face/", {
+                const res = await fetch("/api/accounts/recognize_face/", {
                     method: "POST",
                     body: formData
                 });
 
-                if (!res.ok) {
-                    document.getElementById("result").innerText = "Server error: " + res.status;
-                    return;
+                const contentType = res.headers.get("content-type");
+                if (contentType && contentType.includes("application/json")) {
+                    const data = await res.json();
+                    document.getElementById("result").innerText = JSON.stringify(data, null, 2);
+                } else {
+                    const text = await res.text();
+                    document.getElementById("result").innerText = "Server returned non-JSON: " + text;
                 }
-
-                const data = await res.json();
-                document.getElementById("result").innerText = JSON.stringify(data, null, 2);
             } catch (err) {
                 document.getElementById("result").innerText = "Fetch error: " + err;
             }
@@ -1346,7 +1356,7 @@ def test_page(request):
     """
     return HttpResponse(html)
 
-
+# ---------------- HEALTH CHECK ----------------
 @require_http_methods(["GET"])
 def health_check(request):
     return JsonResponse({"status": "Face Recognition API is running ✅"})
