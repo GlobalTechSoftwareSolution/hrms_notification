@@ -5,10 +5,10 @@ django-cors-headers==4.9.0
 djangorestframework==3.16.1
 djangorestframework_simplejwt==5.5.1
 gunicorn==23.0.0
-numpy==1.26.0
-opencv-python==4.12.0.88
+numpy==2.2.6
+opencv-python-headless==4.12.0.88
 packaging==25.0
-Pillow==10.1.0
+pillow==11.3.0
 psycopg2-binary==2.9.10
 PyJWT==2.10.1
 python-decouple==3.8
@@ -17,7 +17,3 @@ sqlparse==0.5.3
 typing_extensions==4.15.0
 tzdata==2025.2
 whitenoise==6.11.0
-Flask==2.3.3
-flask-cors==3.0.10
-opencv-python-headless==4.8.1.78
-

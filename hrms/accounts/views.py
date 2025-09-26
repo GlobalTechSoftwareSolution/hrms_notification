@@ -1194,7 +1194,7 @@ from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_http_methods
 
 # Config
-BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(_file_)))
+BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 KNOWN_DIR = os.path.join(BASE_DIR, "face", "known_faces")
 HAAR_PATH = cv2.data.haarcascades + "haarcascade_frontalface_default.xml"
 
