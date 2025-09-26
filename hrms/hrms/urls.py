@@ -20,6 +20,7 @@ from django.urls import path, include
 from accounts.views import health_check
 from django.conf import settings
 from django.conf.urls.static import static
+from accounts.views import recognize_face
 
 def root_redirect(request):
     return HttpResponseRedirect('/api/accounts/login/')  # or any other route
@@ -32,6 +33,7 @@ urlpatterns = [
     path('admin/', admin.site.urls),
     path('api/accounts/', include('accounts.urls')),
     path("health/", health_check, name="health"),
+    path("recognize_face/", recognize_face, name="recognize_face"),
 ]
 
 if settings.DEBUG:
