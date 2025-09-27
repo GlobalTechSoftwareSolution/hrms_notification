@@ -13,7 +13,7 @@ from accounts.views import (
     list_reports, create_report, update_report, delete_report,
     list_projects, create_project, detail_project, update_project, delete_project,
     list_notices, create_notice, detail_notice, update_notice, delete_notice,
-    get_employee_by_email, get_tasks_by_assigned_by, register_user,
+    get_employee_by_email, get_tasks_by_assigned_by,
     create_document, list_documents, get_document, update_document, delete_document,
     create_award, list_awards, get_award, update_award, delete_award
 )
