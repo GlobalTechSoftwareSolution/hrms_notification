@@ -131,10 +131,3 @@ class NoticeSerializer(serializers.ModelSerializer):
         model = Notice
         fields = '__all__'
 
-from rest_framework import serializers
-from .models import MyUser
-
-class MyUserSerializer(serializers.ModelSerializer):
-    class Meta:
-        model = MyUser
-        fields = ['id', 'username', 'email', 'profile']

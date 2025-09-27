@@ -89,18 +89,69 @@ class Manager(models.Model):
 class Employee(models.Model):
     email = models.OneToOneField(User, on_delete=models.CASCADE, to_field='email', primary_key=True)
     fullname = models.CharField(max_length=255)
-    age = models.IntegerField(null=True, blank=True)
     phone = models.CharField(max_length=20, null=True, blank=True)
     department = models.CharField(max_length=100, null=True, blank=True)
     designation = models.CharField(max_length=100, null=True, blank=True)
     date_of_birth = models.DateField(null=True, blank=True)
     date_joined = models.DateField(null=True, blank=True)
-    reports_to = models.ForeignKey(Manager, on_delete=models.SET_NULL, to_field='email', null=True, blank=True)
+    reports_to = models.ForeignKey('Manager', on_delete=models.SET_NULL, to_field='email', null=True, blank=True)
     skills = models.TextField(null=True, blank=True)
     profile_picture = models.ImageField(upload_to='images/', null=True, blank=True)
+    gender = models.CharField(max_length=20, null=True, blank=True)
+    marital_status = models.CharField(max_length=20, null=True, blank=True)
+    nationality = models.CharField(max_length=50, null=True, blank=True)
+    current_address = models.TextField(null=True, blank=True)
+    permanent_address = models.TextField(null=True, blank=True)
+    emergency_contact_no = models.CharField(max_length=20, null=True, blank=True)
+    emp_id = models.CharField(max_length=50, unique=True, null=True)
+    employment_type = models.CharField(max_length=50, null=True, blank=True)
+    work_location = models.CharField(max_length=100, null=True, blank=True)
+    team = models.CharField(max_length=100, null=True, blank=True)
+    degree = models.CharField(max_length=100, null=True, blank=True)
+    degree_passout_year = models.PositiveIntegerField(null=True, blank=True)
+    institution = models.CharField(max_length=255, null=True, blank=True)
+    grade = models.CharField(max_length=20, null=True, blank=True)
+    languages = models.TextField(null=True, blank=True)
 
     def __str__(self):
         return f"{self.fullname} (Employee)"
+
+
+
+class Document(models.Model):
+    email = models.ForeignKey(
+        'User', on_delete=models.CASCADE, to_field='email', related_name='documents'
+    )
+
+    tenth = models.FileField(upload_to='documents/10th/', null=True, blank=True)
+    twelth = models.FileField(upload_to='documents/12th/', null=True, blank=True)
+    degree = models.FileField(upload_to='documents/degree/', null=True, blank=True)
+    marks_card = models.FileField(upload_to='documents/marks_cards/', null=True, blank=True)
+    award = models.FileField(upload_to='documents/awards/', null=True, blank=True)
+    resume = models.FileField(upload_to='documents/resumes/', null=True, blank=True)
+    id_proof = models.FileField(upload_to='documents/id_proofs/', null=True, blank=True)
+
+    uploaded_at = models.DateTimeField(auto_now_add=True)
+
+    def __str__(self):
+        return f"Documents for {self.email}"
+    
+from django.db import models
+
+class Award(models.Model):
+    email = models.ForeignKey(
+        'User', on_delete=models.CASCADE, to_field='email', related_name='awards'
+    )
+    title = models.CharField(max_length=255)
+    description = models.TextField(null=True, blank=True)
+    date = models.DateField(null=True, blank=True)
+    photo = models.ImageField(upload_to='awards/photos/', null=True, blank=True)
+
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    def __str__(self):
+        return f"{self.title} - {self.email}"
+
 
 
 class Admin(models.Model):
@@ -305,20 +356,3 @@ class Notice(models.Model):
     def __str__(self):
         return self.title
     
-from django.db import models
-
-class MyUser(models.Model):
-    username = models.CharField(max_length=150, unique=True)
-    email = models.EmailField(unique=True)
-    profile = models.ImageField(upload_to='profiles/')
-
-    def __str__(self):
-        return self.username
-
-class Attendee(models.Model):
-    user_email = models.ForeignKey(MyUser, to_field='email', on_delete=models.CASCADE)
-    check_in = models.DateTimeField()
-    check_out = models.DateTimeField(null=True, blank=True)
-
-    def __str__(self):
-        return f"{self.user_email.email} - Check in at {self.check_in}"

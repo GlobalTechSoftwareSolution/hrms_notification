@@ -5,7 +5,7 @@ from rest_framework_simplejwt.views import (
 )
 from accounts.views import (
     LoginView, CreateSuperUserView, SignupView, approve_user, reject_user,
-    recognize_face, today_attendance, RegisterView, list_attendance,
+    today_attendance, RegisterView, list_attendance,
     UserViewSet, EmployeeViewSet, HRViewSet, ManagerViewSet, AdminViewSet, CEOViewSet,
     apply_leave, update_leave_status, leaves_today, list_leaves,
     create_payroll, update_payroll_status, get_payroll, list_payrolls,
@@ -13,8 +13,9 @@ from accounts.views import (
     list_reports, create_report, update_report, delete_report,
     list_projects, create_project, detail_project, update_project, delete_project,
     list_notices, create_notice, detail_notice, update_notice, delete_notice,
-    get_employee_by_email, get_tasks_by_assigned_by, MyUserCreateView, recognize_face, test_page, 
-    health_check, mark_attendance
+    get_employee_by_email, get_tasks_by_assigned_by, register_user,
+    create_document, list_documents, get_document, update_document, delete_document,
+    create_award, list_awards, get_award, update_award, delete_award
 )
 
 urlpatterns = [
@@ -22,9 +23,6 @@ urlpatterns = [
     path('login/', LoginView.as_view(), name='login'),
     path('approve/', approve_user),
     path('reject/', reject_user),
-    # path("token/", TokenObtainPairView.as_view(), name="token_obtain_pair"),
-    # path("token/refresh/", TokenRefreshView.as_view(), name="token_refresh"),
-    path("recognize_face/", recognize_face, name="recognize_face"),
     path("today_attendance/", today_attendance, name="today_attendance"),
     path('list_attendance/', list_attendance, name='attendance-list'),
 
@@ -79,11 +77,18 @@ urlpatterns = [
     path('notice/<int:pk>/', detail_notice, name='detail_notice'),
     path('update_notice/<int:pk>/', update_notice, name='update_notice'),
     path('delete_notice/<int:pk>/', delete_notice, name='delete_notice'),
+
+    path('create_document/', create_document, name='create_document'),
+    path('list_documents/', list_documents, name='list_documents'),
+    path('get_document/<int:id>/', get_document, name='get_document'),
+    path('update_document/<int:id>/', update_document, name='update_document'),
+    path('delete_document/<int:id>/', delete_document, name='delete_document'),
+
+    path('create_award/', create_award, name='create_award'),
+    path('list_awards/', list_awards, name='list_awards'),
+    path('get_award/<int:id>/', get_award, name='get_award'),
+    path('update_award/<int:id>/', update_award, name='update_award'),
+    path('delete_award/<int:id>/', delete_award, name='delete_award'),
     
     path('employees/<str:email>/', get_employee_by_email, name='get_employee_by_email'),
-    path('myuser/', MyUserCreateView.as_view(), name='myuser-create'),
-    path("recognize_face/", recognize_face, name="recognize_face"),
-    path("test/", test_page, name="test_page"),
-    path("health/", health_check, name="health_check"),
-    path('mark/', mark_attendance, name='mark-attendance'),
 ]

@@ -28,14 +28,15 @@ from rest_framework.decorators import api_view, permission_classes
 # Models
 from .models import (
     User, CEO, HR, Manager, Employee, Attendance, Admin,
-    Leave, Payroll, TaskTable, Project, Notice, Report
+    Leave, Payroll, TaskTable, Project, Notice, Report,
+    Document, Award
 )
 
 # Serializers
 from .serializers import (
     UserSerializer, CEOSerializer, HRSerializer, ManagerSerializer,
     EmployeeSerializer, SuperUserCreateSerializer, UserRegistrationSerializer,
-    AdminSerializer, ReportSerializer, RegisterSerializer
+    AdminSerializer, ReportSerializer, RegisterSerializer, DocumentSerializer, AwardSerializer
 )
 
 # Ensure User model points to custom one
@@ -211,76 +212,6 @@ if os.path.exists(KNOWN_FACES_DIR):
 else:
     print(f"[WARNING] Known faces directory {KNOWN_FACES_DIR} not found. Skipping face loading.")
 
-
-# # Face detector Haar cascade
-# face_cascade = cv2.CascadeClassifier(cv2.data.haarcascades + "haarcascade_frontalface_default.xml")
-
-# @api_view(['POST'])
-# @permission_classes([AllowAny])
-# def recognize_face(request):
-#     data = request.data
-#     image_data = data.get("image", "")
-#     if not image_data:
-#         return JsonResponse({"error": "No image data provided"}, status=400)
-
-#     if "," in image_data:
-#         image_data = image_data.split(",")[1]
-
-#     img_bytes = base64.b64decode(image_data)
-#     img = Image.open(BytesIO(img_bytes)).convert('RGB')
-#     img_np = np.array(img)
-#     gray = cv2.cvtColor(img_np, cv2.COLOR_RGB2GRAY)
-
-#     # Detect faces
-#     faces = face_cascade.detectMultiScale(gray, scaleFactor=1.1, minNeighbors=5)
-#     if len(faces) == 0:
-#         return JsonResponse({"username": "No face detected"}, status=200)
-
-#     x, y, w, h = faces[0]
-#     face_roi = gray[y:y+h, x:x+w]
-
-#     kp2, des2 = orb.detectAndCompute(face_roi, None)
-#     if des2 is None:
-#         return JsonResponse({"username": "Unknown", "reason": "No features detected in input face"}, status=200)
-
-#     bf = cv2.BFMatcher(cv2.NORM_HAMMING, crossCheck=True)
-
-#     best_match = None
-#     best_avg_distance = 100
-
-#     # Match input face with all known faces
-#     for des_known, name in zip(known_face_descriptors, known_face_names):
-#         matches = bf.match(des_known, des2)
-#         if not matches:
-#             continue
-#         matches = sorted(matches, key=lambda m: m.distance)
-#         avg_distance = sum(m.distance for m in matches) / len(matches)
-#         if avg_distance < best_avg_distance:
-#             best_avg_distance = avg_distance
-#             best_match = name
-
-#     threshold = 45  # Tune this threshold based on your tests
-
-#     if best_match and best_avg_distance < threshold:
-#         username = best_match
-#         email = get_email_by_username(username)  # Your existing function
-#         confidence = round((1 - (best_avg_distance / threshold)) * 100, 2)
-#         attendance = mark_attendance_by_email(email)  # Your existing function
-#     else:
-#         username = "Unknown"
-#         email = None
-#         confidence = 0
-#         attendance = None
-
-#     return JsonResponse({
-#         "username": username,
-#         "email": email,
-#         "confidence": f"{confidence}%" if email else "",
-#         "check_in": str(attendance.check_in) if attendance else "",
-#         "check_out": str(attendance.check_out) if attendance else ""
-#     })
-
-
 # =====================
 # Today attendance view
 # =====================
@@ -383,6 +314,16 @@ class CEOViewSet(viewsets.ModelViewSet):
     queryset = CEO.objects.all()
     serializer_class = CEOSerializer
     lookup_field = 'email'
+
+class DocumentViewSet(viewsets.ModelViewSet):
+    queryset = Document.objects.all()
+    serializer_class = DocumentSerializer
+    lookup_field = 'email'  # use email instead of pk
+
+class AwardViewSet(viewsets.ModelViewSet):
+    queryset = Award.objects.all()
+    serializer_class = AwardSerializer
+    lookup_field = 'email'  # use email instead of pk
 
 
 @csrf_exempt
@@ -1173,263 +1114,141 @@ def get_tasks_by_assigned_by(request, assigned_by_email):
         return JsonResponse(data, safe=False, status=200)
     except Exception as e:
         return JsonResponse({"error": str(e)}, status=500)
-    
-from rest_framework import generics
-from .models import MyUser
-from .serializers import MyUserSerializer
 
-class MyUserCreateView(generics.CreateAPIView):
-    queryset = MyUser.objects.all()
-    serializer_class = MyUserSerializer
-
-
-import os
-import io
-import base64
-from PIL import Image
-import numpy as np
-import cv2
-import json
-from django.http import JsonResponse, HttpResponse
-from django.views.decorators.csrf import csrf_exempt
-from django.views.decorators.http import require_http_methods
-
-# ---------------- CONFIG ----------------
-BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-KNOWN_DIR = os.path.join(BASE_DIR, "face", "known_faces")
-HAAR_PATH = cv2.data.haarcascades + "haarcascade_frontalface_default.xml"
-
-face_cascade = cv2.CascadeClassifier(HAAR_PATH)
-orb = cv2.ORB_create(nfeatures=500)
-bf = cv2.BFMatcher(cv2.NORM_HAMMING, crossCheck=True)
-known_descriptors = []
-
-# ---------------- LOAD KNOWN FACES ----------------
-def load_known_faces():
-    if not os.path.isdir(KNOWN_DIR):
-        os.makedirs(KNOWN_DIR, exist_ok=True)
-        print(f"[INFO] Created known faces dir: {KNOWN_DIR}")
-        return
-
-    for fname in os.listdir(KNOWN_DIR):
-        if not fname.lower().endswith(('.jpg', '.jpeg', '.png')):
-            continue
-        path = os.path.join(KNOWN_DIR, fname)
-        base = os.path.splitext(fname)[0]
-        parts = base.split("__")
-        username = parts[0] if len(parts) > 0 else base
-        email = parts[1] if len(parts) > 1 else ""
-        img = cv2.imread(path, cv2.IMREAD_GRAYSCALE)
-        if img is None:
-            continue
-        faces = face_cascade.detectMultiScale(img, scaleFactor=1.1, minNeighbors=4, minSize=(30,30))
-        crop = img
-        if len(faces) > 0:
-            x, y, w, h = faces[0]
-            crop = img[y:y+h, x:x+w]
-        kp, des = orb.detectAndCompute(crop, None)
-        if des is not None:
-            known_descriptors.append((des, username.lower(), email.lower()))
-            print(f"[INFO] Loaded known face: {username} ({email})")
-
-load_known_faces()
-
-# ---------------- UTIL ----------------
-def decode_base64_image(data_url):
-    if "," in data_url:
-        _, b64 = data_url.split(",", 1)
-    else:
-        b64 = data_url
-    raw = base64.b64decode(b64)
-    img = Image.open(io.BytesIO(raw)).convert("RGB")
-    return cv2.cvtColor(np.array(img), cv2.COLOR_RGB2BGR)
-
-# ---------------- FACE RECOGNITION ----------------
 @csrf_exempt
-@require_http_methods(["POST"])
-def recognize_face(request):
-    try:
-        # Uploaded file
-        if request.FILES.get("file"):
-            file = request.FILES["file"]
-            img = Image.open(file).convert("RGB")
-            img_bgr = cv2.cvtColor(np.array(img), cv2.COLOR_RGB2BGR)
-            input_username = request.POST.get("username", "").lower()
-            input_email = request.POST.get("email", "").lower()
-        else:
-            # Base64 fallback
-            data = json.loads(request.body)
-            img_b64 = data.get("image")
-            input_username = data.get("username", "").lower()
-            input_email = data.get("email", "").lower()
-            if not img_b64:
-                return JsonResponse({"error": "No image provided"}, status=400)
-            img_bgr = decode_base64_image(img_b64)
+def create_document(request):
+    if request.method == "POST":
+        email = request.POST.get("email")
+        user = get_object_or_404(User, email=email)
+        document = Document.objects.create(
+            email=user,
+            tenth=request.FILES.get("tenth"),
+            twelfth=request.FILES.get("twelfth"),
+            degree=request.FILES.get("degree"),
+            marks_card=request.FILES.get("marks_card"),
+            award=request.FILES.get("award"),
+            resume=request.FILES.get("resume"),
+            id_proof=request.FILES.get("id_proof"),
+        )
+        return JsonResponse({"message": "Document created", "id": document.id})
 
-        gray = cv2.cvtColor(img_bgr, cv2.COLOR_BGR2GRAY)
-        faces = face_cascade.detectMultiScale(gray, scaleFactor=1.1, minNeighbors=4, minSize=(40,40))
-        if len(faces) == 0:
-            return JsonResponse({"recognized": False, "message": "No face detected"})
 
-        x, y, w, h = faces[0]
-        face_roi = gray[y:y+h, x:x+w]
-        kp2, des2 = orb.detectAndCompute(face_roi, None)
-        if des2 is None:
-            return JsonResponse({"recognized": False, "message": "No features found in face"})
-
-        # Compare descriptors
-        best_name, best_email, best_score = None, None, float("inf")
-        for des_known, name, email in known_descriptors:
-            try:
-                matches = bf.match(des_known, des2)
-            except Exception:
-                continue
-            if not matches:
-                continue
-            avg = np.mean([m.distance for m in matches])
-            if avg < best_score:
-                best_score = avg
-                best_name = name
-                best_email = email
-
-        THRESHOLD = 50
-        if best_name and best_score < THRESHOLD:
-            return JsonResponse({
-                "recognized": True,
-                "username": best_name,
-                "email": best_email,
-                "score": float(best_score)
-            })
-
-        return JsonResponse({
-            "recognized": False,
-            "message": "Unknown person",
-            "best_guess": best_name or "",
-            "score": float(best_score) if best_name else None
+def list_documents(request):
+    documents = Document.objects.all()
+    data = []
+    for doc in documents:
+        data.append({
+            "id": doc.id,
+            "email": doc.email.email,
+            "tenth": doc.tenth.url if doc.tenth else None,
+            "twelfth": doc.twelfth.url if doc.twelfth else None,
+            "degree": doc.degree.url if doc.degree else None,
+            "marks_card": doc.marks_card.url if doc.marks_card else None,
+            "award": doc.award.url if doc.award else None,
+            "resume": doc.resume.url if doc.resume else None,
+            "id_proof": doc.id_proof.url if doc.id_proof else None,
         })
-
-    except Exception as e:
-        return JsonResponse({"error": str(e)}, status=500)
-
-# ---------------- TEST PAGE ----------------
-@require_http_methods(["GET"])
-def test_page(request):
-    html = """
-    <html>
-    <body>
-        <h1>Face Recognition Test</h1>
-        <input type="file" id="imgInput" accept="image/*"/>
-        <button onclick="sendImage()">Recognize</button>
-        <pre id="result"></pre>
-
-        <script>
-        async function sendImage() {
-            const file = document.getElementById("imgInput").files[0];
-            if (!file) { alert("Please select a file first"); return; }
-
-            const formData = new FormData();
-            formData.append("file", file);
-            formData.append("username", "mani");  // optional
-            formData.append("email", "mani@gmail.com"); // optional
-
-            try {
-                const res = await fetch("/api/accounts/recognize_face/", {
-                    method: "POST",
-                    body: formData
-                });
-
-                const contentType = res.headers.get("content-type");
-                if (contentType && contentType.includes("application/json")) {
-                    const data = await res.json();
-                    document.getElementById("result").innerText = JSON.stringify(data, null, 2);
-                } else {
-                    const text = await res.text();
-                    document.getElementById("result").innerText = "Server returned non-JSON: " + text;
-                }
-            } catch (err) {
-                document.getElementById("result").innerText = "Fetch error: " + err;
-            }
-        }
-        </script>
-    </body>
-    </html>
-    """
-    return HttpResponse(html)
-
-# ---------------- HEALTH CHECK ----------------
-@require_http_methods(["GET"])
-def health_check(request):
-    return JsonResponse({"status": "Face Recognition API is running ✅"})
-
-from rest_framework.decorators import api_view
-from rest_framework.response import Response
-from django.utils import timezone
-from PIL import Image
-import numpy as np
-import cv2
-import os
-from django.conf import settings
-from .models import HR, CEO, Manager, Employee, Admin, Attendance
+    return JsonResponse(data, safe=False)
 
 
-def preprocess_image_for_lbph(pil_image):
-    rgb_image = pil_image.convert('RGB')
-    np_image = np.array(rgb_image)
-    gray_image = cv2.cvtColor(np_image, cv2.COLOR_RGB2GRAY)
-    return gray_image
+def get_document(request, id):
+    doc = get_object_or_404(Document, id=id)
+    data = {
+        "id": doc.id,
+        "email": doc.email.email,
+        "tenth": doc.tenth.url if doc.tenth else None,
+        "twelfth": doc.twelfth.url if doc.twelfth else None,
+        "degree": doc.degree.url if doc.degree else None,
+        "marks_card": doc.marks_card.url if doc.marks_card else None,
+        "award": doc.award.url if doc.award else None,
+        "resume": doc.resume.url if doc.resume else None,
+        "id_proof": doc.id_proof.url if doc.id_proof else None,
+    }
+    return JsonResponse(data)
 
 
-def faces_are_similar(face1_gray, face2_gray, threshold=0.7):
-    hist1 = cv2.calcHist([face1_gray], [0], None, [256], [0, 256])
-    hist2 = cv2.calcHist([face2_gray], [0], None, [256], [0, 256])
-    cv2.normalize(hist1, hist1)
-    cv2.normalize(hist2, hist2)
-    score = cv2.compareHist(hist1, hist2, cv2.HISTCMP_CORREL)
-    return score > threshold
+@csrf_exempt
+def update_document(request, id):
+    if request.method in ["POST", "PATCH"]:
+        doc = get_object_or_404(Document, id=id)
+        for field in ["tenth", "twelfth", "degree", "marks_card", "award", "resume", "id_proof"]:
+            if request.FILES.get(field):
+                setattr(doc, field, request.FILES.get(field))
+        doc.save()
+        return JsonResponse({"message": "Document updated"})
 
 
-@api_view(['POST'])
-def mark_attendance(request):
-    if 'image' not in request.FILES:
-        return Response({'error': 'No image uploaded'}, status=400)
-    
-    try:
-        uploaded_pil_image = Image.open(request.FILES['image'])
-    except Exception:
-        return Response({'error': 'Invalid image file'}, status=400)
-    
-    uploaded_gray = preprocess_image_for_lbph(uploaded_pil_image)
-    matched_user = None
+@csrf_exempt
+def delete_document(request, id):
+    if request.method == "DELETE":
+        doc = get_object_or_404(Document, id=id)
+        doc.delete()
+        return JsonResponse({"message": "Document deleted"})
 
-    # Try matching face against all role models
-    for role_model in [HR, CEO, Manager, Employee, Admin]:
-        for person in role_model.objects.exclude(profile_picture=''):
-            try:
-                # Correct path using MEDIA_ROOT + profile_picture.name from DB
-                img_path = os.path.join(settings.MEDIA_ROOT, person.profile_picture.name)
-                stored_pil_image = Image.open(img_path)
-            except Exception:
-                continue
-            stored_gray = preprocess_image_for_lbph(stored_pil_image)
 
-            if faces_are_similar(uploaded_gray, stored_gray):
-                matched_user = person.email
-                break
-        if matched_user:
-            break
+# ------------------------ AWARDS ------------------------
 
-    if not matched_user:
-        return Response({'error': 'Face not recognized'}, status=404)
+@csrf_exempt
+def create_award(request):
+    if request.method == "POST":
+        data = request.POST
+        email = data.get("email")
+        user = get_object_or_404(User, email=email)
+        award = Award.objects.create(
+            email=user,
+            title=data.get("title"),
+            description=data.get("description"),
+            date=data.get("date"),
+            photo=request.FILES.get("photo"),
+        )
+        return JsonResponse({"message": "Award created", "id": award.id})
 
-    today = timezone.localdate()
-    attendance, created = Attendance.objects.get_or_create(email=matched_user, date=today)
 
-    current_time = timezone.localtime().time()
-    if not attendance.check_in:
-        attendance.check_in = current_time
-    else:
-        attendance.check_out = current_time
+def list_awards(request):
+    awards = Award.objects.all()
+    data = []
+    for a in awards:
+        data.append({
+            "id": a.id,
+            "email": a.email.email,
+            "title": a.title,
+            "description": a.description,
+            "date": a.date,
+            "photo": a.photo.url if a.photo else None,
+        })
+    return JsonResponse(data, safe=False)
 
-    attendance.save()
 
-    return Response({'message': f'Attendance marked for {matched_user.email}'})
+def get_award(request, id):
+    a = get_object_or_404(Award, id=id)
+    data = {
+        "id": a.id,
+        "email": a.email.email,
+        "title": a.title,
+        "description": a.description,
+        "date": a.date,
+        "photo": a.photo.url if a.photo else None,
+    }
+    return JsonResponse(data)
+
+
+@csrf_exempt
+def update_award(request, id):
+    if request.method in ["POST", "PATCH"]:
+        a = get_object_or_404(Award, id=id)
+        data = request.POST
+        for field in ["title", "description", "date"]:
+            if data.get(field):
+                setattr(a, field, data.get(field))
+        if request.FILES.get("photo"):
+            a.photo = request.FILES.get("photo")
+        a.save()
+        return JsonResponse({"message": "Award updated"})
+
+
+@csrf_exempt
+def delete_award(request, id):
+    if request.method == "DELETE":
+        a = get_object_or_404(Award, id=id)
+        a.delete()
+        return JsonResponse({"message": "Award deleted"})

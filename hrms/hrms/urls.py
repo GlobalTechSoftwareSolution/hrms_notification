@@ -34,7 +34,4 @@ urlpatterns = [
     path('api/accounts/', include('accounts.urls')),
     path("health/", health_check, name="health"),
     path("recognize_face/", recognize_face, name="recognize_face"),
-]
-
-if settings.DEBUG:
-    urlpatterns += static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)
+] + static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)
