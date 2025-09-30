@@ -33,7 +33,7 @@ class User(AbstractBaseUser, PermissionsMixin):
 
     objects = UserManager()
 
-    def __str__(self):
+    def _str_(self):
         return f"{self.email} ({self.role})"
 
 
@@ -49,7 +49,7 @@ class HR(models.Model):
     skills = models.TextField(null=True, blank=True)
     profile_picture = models.ImageField(upload_to='images/', null=True, blank=True)
 
-    def __str__(self):
+    def _str_(self):
         return f"{self.fullname} (HR)"
 
 
@@ -65,7 +65,7 @@ class CEO(models.Model):
     bio = models.TextField(null=True, blank=True)
     profile_picture = models.ImageField(upload_to='images/', null=True, blank=True)
 
-    def __str__(self):
+    def _str_(self):
         return f"{self.fullname} (CEO)"
 
 
@@ -82,7 +82,7 @@ class Manager(models.Model):
     projects_handled = models.TextField(null=True, blank=True)
     profile_picture = models.ImageField(upload_to='images/', null=True, blank=True)
 
-    def __str__(self):
+    def _str_(self):
         return f"{self.fullname} (Manager)"
 
 
@@ -102,6 +102,8 @@ class Employee(models.Model):
     nationality = models.CharField(max_length=50, null=True, blank=True)
     current_address = models.TextField(null=True, blank=True)
     permanent_address = models.TextField(null=True, blank=True)
+    emergency_contact_name = models.CharField(max_length=100, null=True, blank=True)  # ✅ New
+    emergency_contact_relationship = models.CharField(max_length=50, null=True, blank=True)  # ✅ New
     emergency_contact_no = models.CharField(max_length=20, null=True, blank=True)
     emp_id = models.CharField(max_length=50, unique=True, null=True)
     employment_type = models.CharField(max_length=50, null=True, blank=True)
@@ -113,7 +115,7 @@ class Employee(models.Model):
     grade = models.CharField(max_length=20, null=True, blank=True)
     languages = models.TextField(null=True, blank=True)
 
-    def __str__(self):
+    def _str_(self):
         return f"{self.fullname} (Employee)"
 
 
@@ -133,7 +135,7 @@ class Document(models.Model):
 
     uploaded_at = models.DateTimeField(auto_now_add=True)
 
-    def __str__(self):
+    def _str_(self):
         return f"Documents for {self.email}"
     
 from django.db import models
@@ -149,7 +151,7 @@ class Award(models.Model):
 
     created_at = models.DateTimeField(auto_now_add=True)
 
-    def __str__(self):
+    def _str_(self):
         return f"{self.title} - {self.email}"
 
 
@@ -161,7 +163,7 @@ class Admin(models.Model):
     office_address = models.TextField(null=True, blank=True)
     profile_picture = models.ImageField(upload_to='images/', null=True, blank=True)
 
-    def __str__(self):
+    def _str_(self):
         return f"{self.fullname} (Admin)"
 
 
@@ -172,16 +174,22 @@ class Attendance(models.Model):
         on_delete=models.CASCADE,
         to_field='email',
     )
+    fullname = models.CharField(max_length=255, null=True, blank=True)
+    department = models.CharField(max_length=100, null=True, blank=True)
     date = models.DateField(default=timezone.localdate)
     check_in = models.TimeField(null=True, blank=True)
     check_out = models.TimeField(null=True, blank=True)
 
-    class Meta:
-        ordering = ['-date']
-        unique_together = ('email', 'date')
-
-    def __str__(self):
-        return f"{self.email.email} ({self.email.role}) - {self.date}"
+    def save(self, *args, **kwargs):
+        if self.email:
+            # automatically fill fullname and department from the User's linked Employee record if exists
+            try:
+                employee = self.email.employee  # assuming User has a OneToOne or related Employee
+                self.fullname = employee.fullname
+                self.department = employee.department
+            except Employee.DoesNotExist:
+                pass
+        super().save(*args, **kwargs)
 
 
 class Leave(models.Model):
@@ -198,7 +206,7 @@ class Leave(models.Model):
     class Meta:
         ordering = ['-applied_on']
 
-    def __str__(self):
+    def _str_(self):
         return f"{self.email.email} - {self.department} Leave from {self.start_date} to {self.end_date} [{self.status}]"
 
 
@@ -224,7 +232,7 @@ class Payroll(models.Model):
         ordering = ['-pay_date']
         unique_together = ('email', 'month', 'year')  # Keep unique per month/year per user
 
-    def __str__(self):
+    def _str_(self):
         return f"Payroll for {self.email.email} - {self.month} {self.year}"
 
     def save(self, *args, **kwargs):
@@ -281,7 +289,7 @@ class TaskTable(models.Model):
         verbose_name = "Task"
         verbose_name_plural = "Tasks"
 
-    def __str__(self):
+    def _str_(self):
         return f"Task: {self.title} for {self.email.email} → {self.status}"
 
 
@@ -308,7 +316,7 @@ class Report(models.Model):
         verbose_name_plural = "Daily Reports"
         unique_together = ('email', 'date')  # one report per user per date
 
-    def __str__(self):
+    def _str_(self):
         return f"{self.title} ({self.date}) by {self.email.email if self.email else 'Unknown'}"
     
 
@@ -336,7 +344,7 @@ class Project(models.Model):
     class Meta:
         ordering = ['-created_at']
 
-    def __str__(self):
+    def _str_(self):
         return self.name
 
 
@@ -353,6 +361,5 @@ class Notice(models.Model):
     class Meta:
         ordering = ['-posted_date']
 
-    def __str__(self):
+    def _str_(self):
         return self.title
-    

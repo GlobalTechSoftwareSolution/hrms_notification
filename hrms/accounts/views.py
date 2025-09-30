@@ -222,7 +222,10 @@ def today_attendance(request):
     data = [
         {
             "email": att.email.email,
-            "date": att.date,
+            "role": att.email.role,
+            "fullname": att.fullname,
+            "department": att.department,
+            "date": str(att.date),
             "check_in": str(att.check_in) if att.check_in else "",
             "check_out": str(att.check_out) if att.check_out else ""
         }
@@ -767,6 +770,8 @@ def list_attendance(request):
         result.append({
             "email": record.email.email,
             "role": record.email.role,
+            "fullname": record.fullname,
+            "department": record.department,
             "date": str(record.date),
             "check_in": str(record.check_in) if record.check_in else None,
             "check_out": str(record.check_out) if record.check_out else None,
@@ -1123,7 +1128,7 @@ def create_document(request):
         document = Document.objects.create(
             email=user,
             tenth=request.FILES.get("tenth"),
-            twelfth=request.FILES.get("twelfth"),
+            twelth=request.FILES.get("twelth"),
             degree=request.FILES.get("degree"),
             marks_card=request.FILES.get("marks_card"),
             award=request.FILES.get("award"),
@@ -1141,7 +1146,7 @@ def list_documents(request):
             "id": doc.id,
             "email": doc.email.email,
             "tenth": doc.tenth.url if doc.tenth else None,
-            "twelfth": doc.twelfth.url if doc.twelfth else None,
+            "twelth": doc.twelth.url if doc.twelth else None,
             "degree": doc.degree.url if doc.degree else None,
             "marks_card": doc.marks_card.url if doc.marks_card else None,
             "award": doc.award.url if doc.award else None,
@@ -1157,7 +1162,7 @@ def get_document(request, id):
         "id": doc.id,
         "email": doc.email.email,
         "tenth": doc.tenth.url if doc.tenth else None,
-        "twelfth": doc.twelfth.url if doc.twelfth else None,
+        "twelth": doc.twelth.url if doc.twelth else None,
         "degree": doc.degree.url if doc.degree else None,
         "marks_card": doc.marks_card.url if doc.marks_card else None,
         "award": doc.award.url if doc.award else None,
@@ -1171,7 +1176,7 @@ def get_document(request, id):
 def update_document(request, id):
     if request.method in ["POST", "PATCH"]:
         doc = get_object_or_404(Document, id=id)
-        for field in ["tenth", "twelfth", "degree", "marks_card", "award", "resume", "id_proof"]:
+        for field in ["tenth", "twelth", "degree", "marks_card", "award", "resume", "id_proof"]:
             if request.FILES.get(field):
                 setattr(doc, field, request.FILES.get(field))
         doc.save()
@@ -1252,3 +1257,92 @@ def delete_award(request, id):
         a = get_object_or_404(Award, id=id)
         a.delete()
         return JsonResponse({"message": "Award deleted"})
+
+
+
+from django.shortcuts import render
+from rest_framework.decorators import api_view, parser_classes
+from rest_framework.parsers import MultiPartParser, FormParser
+from rest_framework.response import Response
+from .models import Employee, Attendance
+from django.utils import timezone
+from datetime import datetime
+import face_recognition
+
+# Attendance HTML page
+def attendance_page(request):
+    return render(request, 'attendance.html')
+
+
+
+from rest_framework.decorators import api_view, permission_classes
+from rest_framework.permissions import AllowAny
+from django.utils import timezone
+from django.http import JsonResponse
+import face_recognition, os
+from .models import Employee, Attendance
+
+@api_view(['POST'])
+@permission_classes([AllowAny])
+def mark_attendance_view(request):
+    try:
+        uploaded_file = request.FILES.get('image')
+        if not uploaded_file:
+            return JsonResponse({"status": "fail", "message": "No image provided"}, status=400)
+
+        import tempfile
+        with tempfile.NamedTemporaryFile(delete=False, suffix=".jpg") as tmp:
+            for chunk in uploaded_file.chunks():
+                tmp.write(chunk)
+            tmp_path = tmp.name
+
+        uploaded_img = face_recognition.load_image_file(tmp_path)
+        uploaded_encodings = face_recognition.face_encodings(uploaded_img)
+
+        if not uploaded_encodings:
+            os.remove(tmp_path)
+            return JsonResponse({"status": "fail", "message": "No face detected"}, status=400)
+
+        uploaded_encoding = uploaded_encodings[0]
+
+        employees = Employee.objects.all()
+        for emp in employees:
+            if not emp.profile_picture or not os.path.exists(emp.profile_picture.path):
+                continue
+
+            emp_img = face_recognition.load_image_file(emp.profile_picture.path)
+            emp_encoding_list = face_recognition.face_encodings(emp_img)
+            if not emp_encoding_list:
+                continue
+
+            emp_encoding = emp_encoding_list[0]
+            match = face_recognition.compare_faces([emp_encoding], uploaded_encoding, tolerance=0.5)
+
+            if match[0]:
+                today = timezone.localdate()
+                now_time = timezone.localtime().time()
+
+                obj, created = Attendance.objects.get_or_create(
+                    email=emp.email,
+                    date=today,
+                    defaults={"check_in": now_time}
+                )
+
+                if created:
+                    msg = f"Check-in marked for {emp.fullname}"
+                else:
+                    if obj.check_out:
+                        msg = f"Attendance already marked for today ({emp.fullname})"
+                    else:
+                        obj.check_out = now_time
+                        obj.save()
+                        msg = f"Check-out marked for {emp.fullname}"
+
+                os.remove(tmp_path)
+                return JsonResponse({"status": "success", "message": msg})
+
+        os.remove(tmp_path)
+        return JsonResponse({"status": "fail", "message": "No match found"}, status=404)
+
+    except Exception as e:
+        return JsonResponse({"status": "error", "message": str(e)}, status=500)

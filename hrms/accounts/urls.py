@@ -15,7 +15,8 @@ from accounts.views import (
     list_notices, create_notice, detail_notice, update_notice, delete_notice,
     get_employee_by_email, get_tasks_by_assigned_by,
     create_document, list_documents, get_document, update_document, delete_document,
-    create_award, list_awards, get_award, update_award, delete_award
+    create_award, list_awards, get_award, update_award, delete_award,
+    attendance_page, mark_attendance_view
 )
 
 urlpatterns = [
@@ -91,4 +92,7 @@ urlpatterns = [
     path('delete_award/<int:id>/', delete_award, name='delete_award'),
     
     path('employees/<str:email>/', get_employee_by_email, name='get_employee_by_email'),
+    path('attendance/', attendance_page, name='attendance_page'),  # frontend page
+    path('mark_attendance/', mark_attendance_view, name='mark_attendance'), 
 ]
+
