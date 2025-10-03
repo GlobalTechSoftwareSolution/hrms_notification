@@ -1,0 +1,48 @@
+CREATE OR REPLACE FUNCTION manage_role_tables_on_user_change()
+RETURNS TRIGGER AS $$
+BEGIN
+  IF (TG_OP = 'INSERT') OR
+     (TG_OP = 'UPDATE' AND (NEW.is_staff <> OLD.is_staff OR NEW.role <> OLD.role)) THEN
+
+    -- Delete any existing role records for this user
+    DELETE FROM accounts_hr WHERE email_id = NEW.email;
+    DELETE FROM accounts_ceo WHERE email_id = NEW.email;
+    DELETE FROM accounts_manager WHERE email_id = NEW.email;
+    DELETE FROM accounts_employee WHERE email_id = NEW.email;
+    DELETE FROM accounts_admin WHERE email_id = NEW.email;
+
+
+    -- Insert according to new role only if is_staff is TRUE
+    IF NEW.is_staff = TRUE THEN
+      IF NEW.role = 'hr' THEN
+        INSERT INTO accounts_hr(email_id, fullname) VALUES (NEW.email, 'Default Name');
+      ELSIF NEW.role = 'ceo' THEN
+        INSERT INTO accounts_ceo(email_id, fullname) VALUES (NEW.email, 'Default Name');
+      ELSIF NEW.role = 'manager' THEN
+        INSERT INTO accounts_manager(email_id, fullname) VALUES (NEW.email, 'Default Name');
+      ELSIF NEW.role = 'employee' THEN
+        INSERT INTO accounts_employee(email_id, fullname) VALUES (NEW.email, 'Default Name');
+      ELSIF NEW.role = 'admin' THEN
+        INSERT INTO accounts_admin(email_id, fullname) VALUES (NEW.email, 'Default Name');
+      END IF;
+    END IF;
+
+  ELSIF TG_OP = 'DELETE' THEN
+    -- On user deletion, remove role records
+    DELETE FROM accounts_hr WHERE email_id = OLD.email;
+    DELETE FROM accounts_ceo WHERE email_id = OLD.email;
+    DELETE FROM accounts_manager WHERE email_id = OLD.email;
+    DELETE FROM accounts_employee WHERE email_id = OLD.email;
+    DELETE FROM accounts_admin WHERE email_id = OLD.email;
+  END IF;
+
+  RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+DROP TRIGGER IF EXISTS trg_manage_role_tables ON accounts_user;
+
+CREATE TRIGGER trg_manage_role_tables
+AFTER INSERT OR UPDATE OR DELETE ON accounts_user
+FOR EACH ROW
+EXECUTE FUNCTION manage_role_tables_on_user_change();
