@@ -1319,8 +1319,10 @@ def mark_attendance_view(request):
             match = face_recognition.compare_faces([emp_encoding], uploaded_encoding, tolerance=0.5)
 
             if match[0]:
-                today = timezone.localdate()
-                now_time = timezone.localtime().time()
+                ist = pytz.timezone("Asia/Kolkata")
+                now_ist = timezone.localtime(timezone.now(), ist)
+                today = now_ist.date()
+                now_time = now_ist.time()
 
                 obj, created = Attendance.objects.get_or_create(
                     email=emp.email,

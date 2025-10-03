@@ -86,6 +86,9 @@ class Manager(models.Model):
         return f"{self.fullname} (Manager)"
 
 
+import os
+from django.db import models
+
 class Employee(models.Model):
     email = models.OneToOneField(User, on_delete=models.CASCADE, to_field='email', primary_key=True)
     fullname = models.CharField(max_length=255)
@@ -102,8 +105,8 @@ class Employee(models.Model):
     nationality = models.CharField(max_length=50, null=True, blank=True)
     current_address = models.TextField(null=True, blank=True)
     permanent_address = models.TextField(null=True, blank=True)
-    emergency_contact_name = models.CharField(max_length=100, null=True, blank=True)  # ✅ New
-    emergency_contact_relationship = models.CharField(max_length=50, null=True, blank=True)  # ✅ New
+    emergency_contact_name = models.CharField(max_length=100, null=True, blank=True)
+    emergency_contact_relationship = models.CharField(max_length=50, null=True, blank=True)
     emergency_contact_no = models.CharField(max_length=20, null=True, blank=True)
     emp_id = models.CharField(max_length=50, unique=True, null=True)
     employment_type = models.CharField(max_length=50, null=True, blank=True)
@@ -115,9 +118,18 @@ class Employee(models.Model):
     grade = models.CharField(max_length=20, null=True, blank=True)
     languages = models.TextField(null=True, blank=True)
 
-    def _str_(self):
+    def __str__(self):
         return f"{self.fullname} (Employee)"
 
+    def save(self, *args, **kwargs):
+        try:
+            this = Employee.objects.get(pk=self.pk)
+            if this.profile_picture and this.profile_picture != self.profile_picture:
+                if os.path.isfile(this.profile_picture.path):
+                    os.remove(this.profile_picture.path)
+        except Employee.DoesNotExist:
+            pass
+        super(Employee, self).save(*args, **kwargs)
 
 
 class Document(models.Model):

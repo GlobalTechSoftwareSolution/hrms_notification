@@ -16,9 +16,6 @@ from pathlib import Path
 BASE_DIR = Path(__file__).resolve().parent.parent
 
 
-# Quick-start development settings - unsuitable for production
-# See https://docs.djangoproject.com/en/5.2/howto/deployment/checklist/
-
 # SECURITY WARNING: keep the secret key used in production secret!
 SECRET_KEY = 'django-insecure-p%%sozx&%uf%86nn4crj^5dbyh5(oo+j)@u8oov^+vker+ub$m'
 # SECRET_KEY = os.getenv('DJANGO_SECRET_KEY')
@@ -86,14 +83,6 @@ MIDDLEWARE = [
 ]
 
 
-# CORS settings
-# CORS_ALLOW_ALL_ORIGINS = True
-# CORS_ALLOWED_ORIGINS = [
-#     "http://localhost:3000",  # for local frontend dev
-#     "https://hrms-6qja.onrender.com",  # your live backend domain
-#     "http://127.0.0.1:3000",
-#     "http://localhost:8080",
-# ]
 CORS_ALLOW_ALL_ORIGINS = False
 CORS_ALLOWED_ORIGINS = [
     "http://localhost:3000",
@@ -140,21 +129,6 @@ TEMPLATES = [
 WSGI_APPLICATION = 'hrms.wsgi.application'
 
 
-# Database
-# https://docs.djangoproject.com/en/5.2/ref/settings/#databases
-
-# DATABASES = {
-#     'default': {
-#         'ENGINE': 'django.db.backends.postgresql_psycopg2',
-#         'HOST': 'db.wsrqysxopuffxwwrlgtx.supabase.co', #hrms
-#         # 'HOST': 'db.ejanftgxxtlbadbqzdib.supabase.co', #test 
-#         'NAME': 'postgres',
-#         'USER': 'postgres',
-#         'PORT': '5432',
-#         'PASSWORD': 'Bengaluru@2021'
-#     }
-# }
-
 from pathlib import Path
 from django.urls import path
 import os 
@@ -164,18 +138,6 @@ from decouple import config
 DATABASES = {
     'default': dj_database_url.parse(config('DATABASE_URL'))
 }
-
-# DATABASES = {
-#     'default': {
-#         'ENGINE': 'django.db.backends.postgresql',
-#         'NAME': "wzcmifzynkfemwhsuola",
-#         'USER': "postgres",
-#         'PASSWORD': "Bengaluru@2021",
-#         'HOST': "wzcmifzynkfemwhsuola.db.ap-south-1.nhost.run",
-#         'PORT': '5432',
-#     }
-# }
-
 
 # Password validation
 # https://docs.djangoproject.com/en/5.2/ref/settings/#auth-password-validators
@@ -223,11 +185,8 @@ DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 
 DEBUG = True
 
-# SUPABASE_URL = os.getenv('SUPABASE_URL')
-# SUPABASE_SERVICE_KEY = os.getenv('SUPABASE_SERVICE_KEY')
-
-
 import os
 
 MEDIA_URL = '/media/'
 MEDIA_ROOT = os.path.join(BASE_DIR, 'media')
+

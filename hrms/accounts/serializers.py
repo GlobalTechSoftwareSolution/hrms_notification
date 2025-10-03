@@ -50,9 +50,19 @@ class ManagerSerializer(serializers.ModelSerializer):
 
 
 class EmployeeSerializer(serializers.ModelSerializer):
+    profile_picture_url = serializers.SerializerMethodField()
+
     class Meta:
         model = Employee
-        fields = '__all__'
+        fields = '__all__'  # include 'profile_picture_url'
+
+    def get_profile_picture_url(self, obj):
+        request = self.context.get('request')
+        if obj.profile_picture and request:
+            return request.build_absolute_uri(obj.profile_picture.url)
+        elif obj.profile_picture:
+            return obj.profile_picture.url
+        return None
 
 
 class AdminSerializer(serializers.ModelSerializer):

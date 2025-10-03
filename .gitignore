@@ -21,7 +21,7 @@ db.sqlite3
 *.sqlite3-journal
 
 # Media / user uploads
-media/
+# media/
 uploads/
 
 # Static files (if you collect them)
