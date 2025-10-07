@@ -190,3 +190,13 @@ import os
 MEDIA_URL = '/media/'
 MEDIA_ROOT = os.path.join(BASE_DIR, 'media')
 
+FRONTEND_URL = "https://globaltechsoftwaresolutions.cloud"
+DEFAULT_FROM_EMAIL = "no-reply@globaltechsoftwaresolutions.cloud"
+
+EMAIL_BACKEND = 'django.core.mail.backends.smtp.EmailBackend'
+EMAIL_HOST = 'smtp.gmail.com'
+EMAIL_PORT = 587
+EMAIL_USE_TLS = True
+EMAIL_HOST_USER = 'hrglobaltechsoftwaresolutions@gmail.com'
+EMAIL_HOST_PASSWORD = 'bxuw agmx ggiq nswv'  # use App Password, not your real password
+DEFAULT_FROM_EMAIL = EMAIL_HOST_USER

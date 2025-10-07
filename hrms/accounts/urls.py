@@ -1,8 +1,4 @@
 from django.urls import path
-from rest_framework_simplejwt.views import (
-    TokenObtainPairView,
-    TokenRefreshView,
-)
 from accounts.views import (
     LoginView, CreateSuperUserView, SignupView, approve_user, reject_user,
     today_attendance, RegisterView, list_attendance,
@@ -16,7 +12,7 @@ from accounts.views import (
     get_employee_by_email, get_tasks_by_assigned_by,
     create_document, list_documents, get_document, update_document, delete_document,
     create_award, list_awards, get_award, update_award, delete_award,
-    attendance_page, mark_attendance_view
+    attendance_page, mark_attendance_view, RequestPasswordResetView, PasswordResetConfirmView
 )
 
 urlpatterns = [
@@ -94,5 +90,7 @@ urlpatterns = [
     path('employees/<str:email>/', get_employee_by_email, name='get_employee_by_email'),
     path('attendance/', attendance_page, name='attendance_page'),  # frontend page
     path('mark_attendance/', mark_attendance_view, name='mark_attendance'), 
-]
 
+    path('password_reset/', RequestPasswordResetView.as_view(), name='password-reset'),
+    path('password_reset_confirm/<uidb64>/<token>/', PasswordResetConfirmView.as_view(), name='password-reset-confirm'),
+]

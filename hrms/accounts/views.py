@@ -1,22 +1,20 @@
-import os
-import json
-import base64
-import pytz
-import numpy as np
-import cv2
+import os, json, pytz, cv2, face_recognition
+
 from io import BytesIO
-from PIL import Image
 
 from django.conf import settings
 from django.utils import timezone
 from django.http import JsonResponse
-from django.shortcuts import get_object_or_404
+from django.shortcuts import get_object_or_404, render
 from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_GET, require_POST, require_http_methods
 from django.contrib.auth import authenticate, get_user_model
-# from django.contrib.auth.decorators import login_required
 from django.utils.dateparse import parse_date
-
+from django.contrib.auth.tokens import PasswordResetTokenGenerator
+from django.utils.encoding import force_bytes, force_str
+from django.utils.http import urlsafe_base64_encode, urlsafe_base64_decode
+from django.core.mail import send_mail
+from django.contrib.sites.shortcuts import get_current_site
 from django.db.models import Q
 
 from rest_framework import status, viewsets, generics
@@ -185,32 +183,6 @@ def mark_attendance_by_email(email_str):
 
     return attendance
 
-
-# =====================
-# Face recognition API
-# =====================
-KNOWN_FACES_DIR = os.path.join(settings.BASE_DIR, "images")
-known_face_names = []
-known_face_descriptors = []
-
-# Initialize ORB detector globally to reuse
-orb = cv2.ORB_create()
-
-# Load known faces and compute ORB descriptors
-if os.path.exists(KNOWN_FACES_DIR):
-    for filename in os.listdir(KNOWN_FACES_DIR):
-        if filename.lower().endswith(('.jpg', '.png')):
-            image_path = os.path.join(KNOWN_FACES_DIR, filename)
-            img = cv2.imread(image_path, cv2.IMREAD_GRAYSCALE)
-            if img is not None:
-                kp, des = orb.detectAndCompute(img, None)
-                if des is not None:
-                    known_face_descriptors.append(des)
-                    username, _ = os.path.splitext(filename)
-                    known_face_names.append(username.lower())
-                    print(f"Loaded known face: {username.lower()}")
-else:
-    print(f"[WARNING] Known faces directory {KNOWN_FACES_DIR} not found. Skipping face loading.")
 
 # =====================
 # Today attendance view
@@ -448,6 +420,7 @@ def list_leaves(request):
     result = []
     for leave in leaves:
         result.append({
+            "id": leave.id,
             "email": leave.email.email,
             "department": leave.department,
             "start_date": str(leave.start_date),
@@ -1259,28 +1232,10 @@ def delete_award(request, id):
         return JsonResponse({"message": "Award deleted"})
 
 
-
-from django.shortcuts import render
-from rest_framework.decorators import api_view, parser_classes
-from rest_framework.parsers import MultiPartParser, FormParser
-from rest_framework.response import Response
-from .models import Employee, Attendance
-from django.utils import timezone
-from datetime import datetime
-import face_recognition
-
 # Attendance HTML page
 def attendance_page(request):
     return render(request, 'attendance.html')
 
-
-
-from rest_framework.decorators import api_view, permission_classes
-from rest_framework.permissions import AllowAny
-from django.utils import timezone
-from django.http import JsonResponse
-import face_recognition, os
-from .models import Employee, Attendance
 
 @api_view(['POST'])
 @permission_classes([AllowAny])
@@ -1348,3 +1303,50 @@ def mark_attendance_view(request):
 
     except Exception as e:
         return JsonResponse({"status": "error", "message": str(e)}, status=500)
+
+
+token_generator = PasswordResetTokenGenerator()
+
+class RequestPasswordResetView(APIView):
+    def post(self, request):
+        email = request.data.get('email')
+        if not email:
+            return Response({'error': 'Email is required'}, status=status.HTTP_400_BAD_REQUEST)
+
+        try:
+            user = User.objects.get(email=email)
+        except User.DoesNotExist:
+            return Response({'error': 'No account found with this email'}, status=status.HTTP_404_NOT_FOUND)
+
+        uidb64 = urlsafe_base64_encode(force_bytes(user.pk))
+        token = token_generator.make_token(user)
+        reset_link = f"{settings.FRONTEND_URL}/reset-password/{uidb64}/{token}/"
+
+        send_mail(
+            'Password Reset Request',
+            f'Click the link below to reset your password:\n{reset_link}',
+            settings.DEFAULT_FROM_EMAIL,
+            [email],
+            fail_silently=False,
+        )
+
+        return Response({'message': 'Password reset link sent successfully'}, status=status.HTTP_200_OK)
+
+class PasswordResetConfirmView(APIView):
+    def post(self, request, uidb64, token):
+        password = request.data.get('password')
+        if not password:
+            return Response({'error': 'Password is required'}, status=status.HTTP_400_BAD_REQUEST)
+
+        try:
+            uid = force_str(urlsafe_base64_decode(uidb64))
+            user = User.objects.get(pk=uid)
+        except (TypeError, ValueError, OverflowError, User.DoesNotExist):
+            return Response({'error': 'Invalid reset link'}, status=status.HTTP_400_BAD_REQUEST)
+
+        if not token_generator.check_token(user, token):
+            return Response({'error': 'Token is invalid or expired'}, status=status.HTTP_400_BAD_REQUEST)
+
+        user.set_password(password)
+        user.save()
+        return Response({'message': 'Password has been reset successfully'}, status=status.HTTP_200_OK)
