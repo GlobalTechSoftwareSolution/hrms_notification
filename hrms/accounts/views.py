@@ -1,4 +1,4 @@
-import os, json, pytz, cv2, face_recognition
+import os, json, pytz, face_recognition, datetime
 
 from io import BytesIO
 
@@ -15,6 +15,7 @@ from django.utils.encoding import force_bytes, force_str
 from django.utils.http import urlsafe_base64_encode, urlsafe_base64_decode
 from django.core.mail import send_mail
 from django.contrib.sites.shortcuts import get_current_site
+from django.template.loader import render_to_string
 from django.db.models import Q
 
 from rest_framework import status, viewsets, generics
@@ -1322,11 +1323,36 @@ class RequestPasswordResetView(APIView):
         token = token_generator.make_token(user)
         reset_link = f"{settings.FRONTEND_URL}/reset-password/{uidb64}/{token}/"
 
+        # Render HTML template
+        html_message = render_to_string('emails/password_reset.html', {
+            'reset_link': reset_link,
+            'current_year': datetime.now().year
+        })
+
+        # Plain text version
+        plain_message = f"""
+            Password Reset Request
+
+            Hello,
+
+            We received a request to reset your password. Click the link below to create a new password:
+
+            {reset_link}
+
+            This link will expire in 24 hours for security reasons.
+
+            If you didn't request a password reset, please ignore this email.
+
+            Best regards,
+            Your Company Name
+        """
+
         send_mail(
-            'Password Reset Request',
-            f'Click the link below to reset your password:\n{reset_link}',
-            settings.DEFAULT_FROM_EMAIL,
-            [email],
+            subject='Password Reset Request',
+            message=plain_message,
+            html_message=html_message,
+            from_email=settings.DEFAULT_FROM_EMAIL,
+            recipient_list=[email],
             fail_silently=False,
         )
 
