@@ -20,26 +20,24 @@ urlpatterns = [
     path('login/', LoginView.as_view(), name='login'),
     path('approve/', approve_user),
     path('reject/', reject_user),
-    path("today_attendance/", today_attendance, name="today_attendance"),
-    path('list_attendance/', list_attendance, name='attendance-list'),
 
     path('users/', UserViewSet.as_view({'get': 'list', 'post': 'create'}), name='employee-list'),
-    path('users/<str:email>/', UserViewSet.as_view({'get': 'retrieve', 'put': 'update', 'delete': 'destroy'}), name='users-detail'),
+    path('users/<str:email>/', UserViewSet.as_view({'get': 'retrieve', 'patch': 'partial_update', 'delete': 'destroy'}), name='users-detail'),
 
     path('employees/', EmployeeViewSet.as_view({'get': 'list', 'post': 'create'}), name='employee-list'),
-    path('employees/<str:email>/', EmployeeViewSet.as_view({'get': 'retrieve', 'put': 'update', 'delete': 'destroy'}), name='employee-detail'),
+    path('employees/<str:email>/', EmployeeViewSet.as_view({'get': 'retrieve', 'patch': 'partial_update', 'delete': 'destroy'}), name='employee-detail'),
 
     path('hrs/', HRViewSet.as_view({'get': 'list', 'post': 'create'}), name='hr-list'),
-    path('hrs/<str:email>/', HRViewSet.as_view({'get': 'retrieve', 'put': 'update', 'delete': 'destroy'}), name='hr-detail'),
+    path('hrs/<str:email>/', HRViewSet.as_view({'get': 'retrieve', 'patch': 'partial_update', 'delete': 'destroy'}), name='hr-detail'),
 
     path('managers/', ManagerViewSet.as_view({'get': 'list', 'post': 'create'}), name='manager-list'),
-    path('managers/<str:email>/', ManagerViewSet.as_view({'get': 'retrieve', 'put': 'update', 'delete': 'destroy'}), name='manager-detail'),
+    path('managers/<str:email>/', ManagerViewSet.as_view({'get': 'retrieve', 'patch': 'partial_update', 'delete': 'destroy'}), name='manager-detail'),
 
     path('admins/', AdminViewSet.as_view({'get': 'list', 'post': 'create'}), name='admin-list'),
-    path('admins/<str:email>/', AdminViewSet.as_view({'get': 'retrieve', 'put': 'update', 'delete': 'destroy'}), name='admin-detail'),
+    path('admins/<str:email>/', AdminViewSet.as_view({'get': 'retrieve', 'patch': 'partial_update', 'delete': 'destroy'}), name='admin-detail'),
 
     path('ceos/', CEOViewSet.as_view({'get': 'list', 'post': 'create'}), name='ceo-list'),
-    path('ceos/<str:email>/', CEOViewSet.as_view({'get': 'retrieve', 'put': 'update', 'delete': 'destroy'}), name='ceo-detail'),
+    path('ceos/<str:email>/', CEOViewSet.as_view({'get': 'retrieve', 'patch': 'partial_update', 'delete': 'destroy'}), name='ceo-detail'),
 
     path('apply_leave/', apply_leave, name='apply_leave'),
     path('update_leave/<int:leave_id>/', update_leave_status, name='update_leave_status'),
@@ -89,7 +87,9 @@ urlpatterns = [
     
     path('employees/<str:email>/', get_employee_by_email, name='get_employee_by_email'),
     path('attendance/', attendance_page, name='attendance_page'),  # frontend page
-    path('mark_attendance/', mark_attendance_view, name='mark_attendance'), 
+    path('mark_attendance/', mark_attendance_view, name='mark_attendance'),
+    path("today_attendance/", today_attendance, name="today_attendance"),
+    path('list_attendance/', list_attendance, name='attendance-list'),
 
     path('password_reset/', RequestPasswordResetView.as_view(), name='password-reset'),
     path('password_reset_confirm/<uidb64>/<token>/', PasswordResetConfirmView.as_view(), name='password-reset-confirm'),

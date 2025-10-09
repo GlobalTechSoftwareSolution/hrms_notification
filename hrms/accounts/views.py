@@ -1,6 +1,8 @@
-import os, json, pytz, face_recognition, datetime
+import os, json, pytz, face_recognition, tempfile
 
 from io import BytesIO
+from datetime import datetime
+from geopy.distance import geodesic
 
 from django.conf import settings
 from django.utils import timezone
@@ -147,15 +149,35 @@ def is_email_exists(email):
 # =====================
 # Mark attendance by email
 # =====================
+OFFICE_LAT = 13.068906816007116
+OFFICE_LON = 77.55541294505542
+LOCATION_RADIUS_METERS = 100  # 100m allowed radius
+
 IST = pytz.timezone("Asia/Kolkata")
 
-def mark_attendance_by_email(email_str):
+def mark_attendance_by_email(email_str, latitude=None, longitude=None):
+    """
+    Marks attendance for a user based on email and live location.
+    Only works if user is within 100 meters of the office.
+    """
     if not is_email_exists(email_str):
         print(f"[mark_attendance_by_email] Email {email_str} not found. Attendance not marked.")
         return None
 
+    if latitude is None or longitude is None:
+        print("[mark_attendance_by_email] Location not provided — attendance not marked.")
+        return None
+
+    user_location = (latitude, longitude)
+    office_location = (OFFICE_LAT, OFFICE_LON)
+    distance_meters = geodesic(user_location, office_location).meters
+
+    if distance_meters > LOCATION_RADIUS_METERS:
+        print(f"[mark_attendance_by_email] User {email_str} is too far ({distance_meters:.2f}m). Attendance denied.")
+        return None
+
     today = timezone.localdate()
-    now = timezone.now().astimezone(IST)   # force IST
+    now = timezone.now().astimezone(IST)
     print(f"[mark_attendance_by_email] Processing attendance for {email_str} on {today} at {now}")
 
     try:
@@ -167,7 +189,7 @@ def mark_attendance_by_email(email_str):
     try:
         attendance = Attendance.objects.get(email=user_instance, date=today)
         if attendance.check_out is None:
-            attendance.check_out = now
+            attendance.check_out = now.time()
             attendance.save()
             print(f"[mark_attendance_by_email] Updated check_out for {email_str} at {now}")
     except Attendance.DoesNotExist:
@@ -175,7 +197,10 @@ def mark_attendance_by_email(email_str):
             attendance = Attendance.objects.create(
                 email=user_instance,
                 date=today,
-                check_in=now
+                check_in=now.time(),
+                latitude=latitude,
+                longitude=longitude,
+                location_verified=True  # ✅ within 100m radius
             )
             print(f"[mark_attendance_by_email] Created new attendance record for {email_str} at {now}")
         except Exception as e:
@@ -208,8 +233,8 @@ def today_attendance(request):
     return JsonResponse({"attendances": data})
 
 
-# Helper function to handle PUT
-def handle_put(request, ModelClass, SerializerClass):
+# Helper function to handle PATCH
+def handle_patch(request, ModelClass, SerializerClass):
     try:
         data = json.loads(request.body)
         email = data.get("email")
@@ -217,8 +242,10 @@ def handle_put(request, ModelClass, SerializerClass):
             return JsonResponse({"error": "Email field is required"}, status=400)
         instance = ModelClass.objects.get(email=email)
     except ModelClass.DoesNotExist:
-        return JsonResponse({"error": f"{ModelClass._name_} not found"}, status=404)
-    serializer = SerializerClass(instance, data=data, partial=True)  # partial=True allows partial updates
+        return JsonResponse({"error": f"{ModelClass.__name__} not found"}, status=404)
+
+    # partial=True enables PATCH-like behavior
+    serializer = SerializerClass(instance, data=data, partial=True)
     if serializer.is_valid():
         serializer.save()
         return JsonResponse(serializer.data)
@@ -967,6 +994,8 @@ def list_notices(request):
             "title": notice.title,
             "message": notice.message,
             "email": notice.email.email if notice.email else None,
+            "notice_by": notice.notice_by.email if notice.notice_by else None,
+            "notice_to": notice.notice_to.email if notice.notice_to else None,
             "posted_date": notice.posted_date.isoformat(),
             "valid_until": notice.valid_until.isoformat() if notice.valid_until else None,
             "important": notice.important,
@@ -980,20 +1009,23 @@ def list_notices(request):
 def create_notice(request):
     try:
         data = json.loads(request.body)
-        email_str = data.get("email")
-        email_user = None
-        if email_str:
-            # Try to get User instance, or else leave null
-            email_user = User.objects.filter(email=email_str).first()
-
+        email_user = User.objects.filter(email=data.get("email")).first() if data.get("email") else None
+        notice_by_user = User.objects.filter(email=data.get("notice_by")).first() if data.get("notice_by") else None
+        notice_to_user = User.objects.filter(email=data.get("notice_to")).first() if data.get("notice_to") else None
         notice = Notice.objects.create(
             title=data.get("title"),
             message=data.get("message"),
             email=email_user,
+            notice_by=notice_by_user,
+            notice_to=notice_to_user,
             important=data.get("important", False),
-            # If you want to handle file attachments, add logic here
         )
-        return JsonResponse({"id": notice.id, "title": notice.title})
+        return JsonResponse({
+            "id": notice.id,
+            "title": notice.title,
+            "notice_by": notice.notice_by.email if notice.notice_by else None,
+            "notice_to": notice.notice_to.email if notice.notice_to else None,
+        })
 
     except Exception as e:
         return JsonResponse({"error": str(e)}, status=400)
@@ -1008,6 +1040,8 @@ def detail_notice(request, pk):
             "title": notice.title,
             "message": notice.message,
             "email": notice.email.email if notice.email else None,
+            "notice_by": notice.notice_by.email if notice.notice_by else None,
+            "notice_to": notice.notice_to.email if notice.notice_to else None,
             "posted_date": notice.posted_date.isoformat(),
             "valid_until": notice.valid_until.isoformat() if notice.valid_until else None,
             "important": notice.important,
@@ -1026,7 +1060,11 @@ def update_notice(request, pk):
         notice.title = data.get("title", notice.title)
         notice.message = data.get("message", notice.message)
         notice.important = data.get("important", notice.important)
-        # You can add update logic for valid_until or attachment if needed
+        if data.get("notice_by"):
+            notice.notice_by = User.objects.filter(email=data.get("notice_by")).first()
+        if data.get("notice_to"):
+            notice.notice_to = User.objects.filter(email=data.get("notice_to")).first()
+
         notice.save()
         return JsonResponse({"message": "Notice updated"})
     except Notice.DoesNotExist:
@@ -1057,13 +1095,9 @@ def get_employee_by_email(request, email):
         return JsonResponse({"error": "Employee not found"}, status=404)
 
 
-from django.http import JsonResponse
-
 def health_check(request):
     return JsonResponse({"status": "ok"})
 
-from django.views.decorators.http import require_GET
-from django.http import JsonResponse
 
 @require_GET
 def get_tasks_by_assigned_by(request, assigned_by_email):
@@ -1238,15 +1272,35 @@ def attendance_page(request):
     return render(request, 'attendance.html')
 
 
+OFFICE_LAT = 13.068906816007116
+OFFICE_LON = 77.55541294505542
+LOCATION_RADIUS_METERS = 500  # 100m allowed radius
+IST = pytz.timezone("Asia/Kolkata")
+
+
 @api_view(['POST'])
 @permission_classes([AllowAny])
 def mark_attendance_view(request):
     try:
+        # 1️⃣ Get latitude and longitude from POST request
+        latitude = request.POST.get("latitude")
+        longitude = request.POST.get("longitude")
+
+        if latitude is None or longitude is None:
+            return JsonResponse({"status": "fail", "message": "Latitude and longitude required"}, status=400)
+
+        try:
+            latitude = float(latitude)
+            longitude = float(longitude)
+        except ValueError:
+            return JsonResponse({"status": "fail", "message": "Invalid latitude or longitude"}, status=400)
+
+        # 2️⃣ Get uploaded image
         uploaded_file = request.FILES.get('image')
         if not uploaded_file:
             return JsonResponse({"status": "fail", "message": "No image provided"}, status=400)
 
-        import tempfile
+        # Save temporary file
         with tempfile.NamedTemporaryFile(delete=False, suffix=".jpg") as tmp:
             for chunk in uploaded_file.chunks():
                 tmp.write(chunk)
@@ -1261,29 +1315,47 @@ def mark_attendance_view(request):
 
         uploaded_encoding = uploaded_encodings[0]
 
+        # 3️⃣ Loop through employees and check face match
         employees = Employee.objects.all()
         for emp in employees:
             if not emp.profile_picture or not os.path.exists(emp.profile_picture.path):
                 continue
 
             emp_img = face_recognition.load_image_file(emp.profile_picture.path)
-            emp_encoding_list = face_recognition.face_encodings(emp_img)
-            if not emp_encoding_list:
+            emp_encodings = face_recognition.face_encodings(emp_img)
+            if not emp_encodings:
                 continue
 
-            emp_encoding = emp_encoding_list[0]
+            emp_encoding = emp_encodings[0]
             match = face_recognition.compare_faces([emp_encoding], uploaded_encoding, tolerance=0.5)
 
             if match[0]:
-                ist = pytz.timezone("Asia/Kolkata")
-                now_ist = timezone.localtime(timezone.now(), ist)
+                # ✅ Check if within 100m of office
+                user_location = (latitude, longitude)
+                office_location = (OFFICE_LAT, OFFICE_LON)
+                distance_meters = geodesic(user_location, office_location).meters
+
+                if distance_meters > LOCATION_RADIUS_METERS:
+                    os.remove(tmp_path)
+                    return JsonResponse({
+                        "status": "fail",
+                        "message": f"User too far from office ({distance_meters:.2f} meters). Attendance denied."
+                    }, status=400)
+
+                # ✅ Mark attendance
+                now_ist = timezone.localtime(timezone.now(), IST)
                 today = now_ist.date()
                 now_time = now_ist.time()
 
                 obj, created = Attendance.objects.get_or_create(
                     email=emp.email,
                     date=today,
-                    defaults={"check_in": now_time}
+                    defaults={
+                        "check_in": now_time,
+                        "latitude": latitude,
+                        "longitude": longitude,
+                        "location_verified": True
+                    }
                 )
 
                 if created:
@@ -1293,6 +1365,9 @@ def mark_attendance_view(request):
                         msg = f"Attendance already marked for today ({emp.fullname})"
                     else:
                         obj.check_out = now_time
+                        obj.latitude = latitude
+                        obj.longitude = longitude
+                        obj.location_verified = True
                         obj.save()
                         msg = f"Check-out marked for {emp.fullname}"
 

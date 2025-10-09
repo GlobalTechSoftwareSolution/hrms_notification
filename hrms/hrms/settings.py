@@ -39,6 +39,7 @@ INSTALLED_APPS = [
     'rest_framework',
     'corsheaders',
     'accounts',
+    'storages',
 ]
 
 # Set custom user model
@@ -88,8 +89,6 @@ CORS_ALLOWED_ORIGINS = [
     "http://localhost:3000",
     "http://127.0.0.1:3000",
     "http://127.0.0.1:8000",
-    "https://corehr-eta.vercel.app",
-    "https://hrms-6qja.onrender.com",
 ]
 CORS_ALLOW_CREDENTIALS = True
 
@@ -103,8 +102,6 @@ CORS_ALLOW_HEADERS = [
 # CSRF trusted origins
 CSRF_TRUSTED_ORIGINS = [
     "http://localhost:3000",
-    'https://hrms-6qja.onrender.com',
-    "https://corehr-eta.vercel.app/",
     "http://localhost:8080",
     "http://127.0.0.1:8000",
 ]
@@ -138,6 +135,18 @@ from decouple import config
 DATABASES = {
     'default': dj_database_url.parse(config('DATABASE_URL'))
 }
+
+# DATABASES = {
+#     'default': {
+#         'ENGINE': 'django.db.backends.postgresql',
+#         'NAME': 'wzcmifzynkfemwhsuola',
+#         'USER': 'postgres',
+#         'PASSWORD': 'Bengaluru@2021',
+#         'HOST': '194.238.19.109',
+#         'PORT': '5432',
+#     }
+# }
+
 
 # Password validation
 # https://docs.djangoproject.com/en/5.2/ref/settings/#auth-password-validators
@@ -183,12 +192,12 @@ STATIC_ROOT = os.path.join(BASE_DIR, 'staticfiles')
 
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 
-DEBUG = True
-
 import os
 
-MEDIA_URL = '/media/'
-MEDIA_ROOT = os.path.join(BASE_DIR, 'media')
+# MEDIA_URL = '/media/'
+# MEDIA_ROOT = os.path.join(BASE_DIR, 'media')
+
+MEDIA_URL = 'http://194.238.19.109:9000/hrms-media/'
 
 FRONTEND_URL = "https://globaltechsoftwaresolutions.cloud"
 DEFAULT_FROM_EMAIL = "no-reply@globaltechsoftwaresolutions.cloud"
@@ -200,3 +209,14 @@ EMAIL_USE_TLS = True
 EMAIL_HOST_USER = 'hrglobaltechsoftwaresolutions@gmail.com'
 EMAIL_HOST_PASSWORD = 'bxuw agmx ggiq nswv'  # use App Password, not your real password
 DEFAULT_FROM_EMAIL = EMAIL_HOST_USER
+
+# --- MinIO (S3 Compatible) Storage Configuration ---
+DEFAULT_FILE_STORAGE = 'storages.backends.s3boto3.S3Boto3Storage'
+AWS_QUERYSTRING_AUTH = False
+AWS_ACCESS_KEY_ID = 'djangouser'
+AWS_SECRET_ACCESS_KEY = 'django_secret_key'
+AWS_STORAGE_BUCKET_NAME = 'hrms-media'   # change if your bucket name differs
+AWS_S3_ENDPOINT_URL = 'http://194.238.19.109:9000'
+AWS_S3_REGION_NAME = 'us-east-1'  # any string works for MinIO
+AWS_S3_SIGNATURE_VERSION = 's3v4'
+AWS_S3_ADDRESSING_STYLE = "path"

@@ -125,8 +125,7 @@ class Employee(models.Model):
         try:
             this = Employee.objects.get(pk=self.pk)
             if this.profile_picture and this.profile_picture != self.profile_picture:
-                if os.path.isfile(this.profile_picture.path):
-                    os.remove(this.profile_picture.path)
+                this.profile_picture.delete(save=False)
         except Employee.DoesNotExist:
             pass
         super(Employee, self).save(*args, **kwargs)
@@ -191,17 +190,22 @@ class Attendance(models.Model):
     date = models.DateField(default=timezone.localdate)
     check_in = models.TimeField(null=True, blank=True)
     check_out = models.TimeField(null=True, blank=True)
+    # latitude = models.FloatField(null=True, blank=True)
+    # longitude = models.FloatField(null=True, blank=True)
+    # location_verified = models.BooleanField(default=False)  # True if within 100m radius
 
     def save(self, *args, **kwargs):
         if self.email:
-            # automatically fill fullname and department from the User's linked Employee record if exists
             try:
-                employee = self.email.employee  # assuming User has a OneToOne or related Employee
+                employee = self.email.employee  # assuming OneToOne relation
                 self.fullname = employee.fullname
                 self.department = employee.department
-            except Employee.DoesNotExist:
+            except Exception:
                 pass
         super().save(*args, **kwargs)
+
+    def __str__(self):
+        return f"{self.fullname or self.email} - {self.date}"
 
 
 class Leave(models.Model):
@@ -364,14 +368,25 @@ class Notice(models.Model):
     id = models.AutoField(primary_key=True)
     title = models.CharField(max_length=255)
     message = models.TextField()
-    email = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, blank=True, to_field='email', related_name='notices')
+    email = models.ForeignKey(
+        User, on_delete=models.SET_NULL, null=True, blank=True,
+        to_field='email', related_name='notices'
+    )
     posted_date = models.DateTimeField(default=timezone.now)
     valid_until = models.DateTimeField(null=True, blank=True)
     important = models.BooleanField(default=False)
     attachment = models.FileField(upload_to='notices/', null=True, blank=True)
+    notice_by = models.ForeignKey(
+        User, on_delete=models.SET_NULL, null=True, blank=True,
+        to_field='email', related_name='notices_by'
+    )
+    notice_to = models.ForeignKey(
+        User, on_delete=models.SET_NULL, null=True, blank=True,
+        to_field='email', related_name='notices_to'
+    )
 
     class Meta:
         ordering = ['-posted_date']
 
-    def _str_(self):
+    def __str__(self):
         return self.title

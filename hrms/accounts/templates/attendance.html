@@ -1,300 +1,338 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-    <meta charset="UTF-8">
-    <title>Face Recognition Attendance</title>
-    <style>
-        :root {
-            --primary: #4361ee;
-            --primary-dark: #3a56d4;
-            --secondary: #7209b7;
-            --success: #4caf50;
-            --warning: #ff9800;
-            --error: #f44336;
-            --light: #f8f9fa;
-            --dark: #212529;
-            --gray: #6c757d;
-            --border-radius: 8px;
-            --box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
-            --transition: all 0.3s ease;
-        }
+  <meta charset="UTF-8">
+  <title>Face Recognition Attendance</title>
+  <style>
+    :root {
+      --primary: #4361ee;
+      --primary-dark: #3a56d4;
+      --secondary: #7209b7;
+      --success: #4caf50;
+      --warning: #ff9800;
+      --error: #f44336;
+      --light: #f8f9fa;
+      --dark: #212529;
+      --gray: #6c757d;
+      --border-radius: 8px;
+      --box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+      --transition: all 0.3s ease;
+    }
 
-        * {
-            margin: 0;
-            padding: 0;
-            box-sizing: border-box;
-            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-        }
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+      font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+    }
 
-        body {
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            min-height: 100vh;
-            display: flex;
-            justify-content: center;
-            align-items: center;
-            padding: 20px;
-        }
+    body {
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      min-height: 100vh;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      padding: 20px;
+    }
 
-        .container {
-            background-color: white;
-            border-radius: var(--border-radius);
-            box-shadow: var(--box-shadow);
-            width: 100%;
-            max-width: 500px;
-            padding: 30px;
-            text-align: center;
-        }
+    .container {
+      background-color: white;
+      border-radius: var(--border-radius);
+      box-shadow: var(--box-shadow);
+      width: 100%;
+      max-width: 500px;
+      padding: 30px;
+      text-align: center;
+    }
 
-        h1 {
-            color: var(--dark);
-            margin-bottom: 20px;
-            font-weight: 600;
-        }
+    h1 {
+      color: var(--dark);
+      margin-bottom: 20px;
+      font-weight: 600;
+    }
 
-        .video-container {
-            position: relative;
-            display: inline-block;
-            width: 100%;
-            max-width: 400px;
-            margin-bottom: 15px;
-        }
+    .video-container {
+      position: relative;
+      display: inline-block;
+      width: 100%;
+      max-width: 400px;
+      margin-bottom: 15px;
+    }
 
-        video, canvas {
-            width: 100%;
-            border-radius: var(--border-radius);
-            box-shadow: var(--box-shadow);
-        }
+    video, canvas {
+      width: 100%;
+      border-radius: var(--border-radius);
+      box-shadow: var(--box-shadow);
+    }
 
-        #canvas {
-            position: absolute;
-            top: 0;
-            left: 0;
-            display: none;
-        }
+    #canvas {
+      position: absolute;
+      top: 0;
+      left: 0;
+      display: none;
+    }
 
-        button {
-            padding: 12px 20px;
-            border: none;
-            border-radius: var(--border-radius);
-            font-weight: 600;
-            cursor: pointer;
-            transition: var(--transition);
-            margin: 8px;
-        }
+    iframe {
+      width: 100%;
+      height: 250px;
+      border: 0;
+      border-radius: var(--border-radius);
+      box-shadow: var(--box-shadow);
+      margin-top: 15px;
+    }
 
-        #startBtn {
-            background-color: var(--primary);
-            color: white;
-        }
+    button {
+      padding: 12px 20px;
+      border: none;
+      border-radius: var(--border-radius);
+      font-weight: 600;
+      cursor: pointer;
+      transition: var(--transition);
+      margin: 8px;
+    }
 
-        #startBtn:hover {
-            background-color: var(--primary-dark);
-            transform: translateY(-2px);
-        }
+    #startBtn {
+      background-color: var(--primary);
+      color: white;
+    }
 
-        #captureBtn {
-            background-color: var(--secondary);
-            color: white;
-        }
+    #startBtn:hover {
+      background-color: var(--primary-dark);
+      transform: translateY(-2px);
+    }
 
-        #captureBtn:hover {
-            background-color: #6507a5;
-            transform: translateY(-2px);
-        }
+    #captureBtn {
+      background-color: var(--secondary);
+      color: white;
+    }
 
-        #uploadBtn {
-            background-color: transparent;
-            border: 1px solid var(--primary);
-            color: var(--primary);
-        }
+    #captureBtn:hover {
+      background-color: #6507a5;
+      transform: translateY(-2px);
+    }
 
-        #uploadBtn:hover {
-            background-color: rgba(67, 97, 238, 0.1);
-        }
+    #uploadBtn {
+      background-color: transparent;
+      border: 1px solid var(--primary);
+      color: var(--primary);
+    }
 
-        input[type="file"] {
-            padding: 10px;
-            border: 1px dashed var(--gray);
-            border-radius: var(--border-radius);
-            cursor: pointer;
-        }
+    #uploadBtn:hover {
+      background-color: rgba(67, 97, 238, 0.1);
+    }
 
-        .upload-row {
-            display: flex;
-            justify-content: center;
-            align-items: center;
-            gap: 10px;
-            flex-wrap: wrap;
-            margin-top: 8px;
-        }
+    input[type="file"] {
+      padding: 10px;
+      border: 1px dashed var(--gray);
+      border-radius: var(--border-radius);
+      cursor: pointer;
+    }
 
-        #message {
-            padding: 15px;
-            border-radius: var(--border-radius);
-            margin-top: 20px;
-            font-weight: 500;
-            display: none;
-            opacity: 0;
-            transition: opacity 0.3s ease;
-        }
+    .upload-row {
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      gap: 10px;
+      flex-wrap: wrap;
+      margin-top: 8px;
+    }
 
-        .msg-success {
-            background-color: rgba(76, 175, 80, 0.1);
-            color: var(--success);
-            border: 1px solid var(--success);
-        }
+    #message {
+      padding: 15px;
+      border-radius: var(--border-radius);
+      margin-top: 20px;
+      font-weight: 500;
+      display: none;
+      opacity: 0;
+      transition: opacity 0.3s ease;
+    }
 
-        .msg-warning {
-            background-color: rgba(255, 152, 0, 0.1);
-            color: var(--warning);
-            border: 1px solid var(--warning);
-        }
+    .msg-success {
+      background-color: rgba(76, 175, 80, 0.1);
+      color: var(--success);
+      border: 1px solid var(--success);
+    }
 
-        .msg-error {
-            background-color: rgba(244, 67, 54, 0.1);
-            color: var(--error);
-            border: 1px solid var(--error);
-        }
+    .msg-warning {
+      background-color: rgba(255, 152, 0, 0.1);
+      color: var(--warning);
+      border: 1px solid var(--warning);
+    }
 
-        @media (max-width: 600px) {
-            button, .upload-row input[type="file"], .upload-row button {
-                width: 100%;
-                margin: 5px 0;
-            }
-        }
-    </style>
+    .msg-error {
+      background-color: rgba(244, 67, 54, 0.1);
+      color: var(--error);
+      border: 1px solid var(--error);
+    }
+
+    @media (max-width: 600px) {
+      button, .upload-row input[type="file"], .upload-row button {
+        width: 100%;
+        margin: 5px 0;
+      }
+    }
+  </style>
 </head>
 <body>
-    <div class="container">
-        <h1>Face Recognition Attendance</h1>
+  <div class="container">
+    <h1>Face Recognition Attendance</h1>
 
-        <div class="video-container">
-            <video id="video" autoplay></video>
-            <canvas id="canvas"></canvas>
-        </div>
-
-        <div>
-            <button id="startBtn">Start Camera</button>
-            <button id="captureBtn">Mark Attendance (Camera)</button>
-
-            <div class="upload-row">
-                <input type="file" id="fileInput" accept="image/*">
-                <button id="uploadBtn">Mark Attendance (Upload)</button>
-            </div>
-        </div>
-
-        <p id="message"></p>
+    <div class="video-container">
+      <video id="video" autoplay></video>
+      <canvas id="canvas"></canvas>
     </div>
 
-    <script>
-        const video = document.getElementById('video');
-        const canvas = document.getElementById('canvas');
-        const context = canvas.getContext('2d');
-        const message = document.getElementById('message');
-        const fileInput = document.getElementById('fileInput');
-        let stream = null;
+    <div>
+      <button id="startBtn">Start Camera</button>
+      <button id="captureBtn">Mark Attendance (Camera)</button>
 
-        async function startCamera() {
-            try {
-                stream = await navigator.mediaDevices.getUserMedia({ video: true });
-                video.srcObject = stream;
-                video.style.display = "block";
-                canvas.style.display = "none";
-                video.play();
-            } catch (err) {
-                showMessage("Cannot access camera", "error");
-                console.error(err);
-            }
+      <div class="upload-row">
+        <input type="file" id="fileInput" accept="image/*">
+        <button id="uploadBtn">Mark Attendance (Upload)</button>
+      </div>
+    </div>
+
+    <p id="locationText">📍 Getting location...</p>
+    <iframe id="mapFrame" src="https://www.google.com/maps?q=0,0&z=15&output=embed"></iframe>
+
+    <p id="message"></p>
+  </div>
+
+  <script>
+    const video = document.getElementById('video');
+    const canvas = document.getElementById('canvas');
+    const context = canvas.getContext('2d');
+    const message = document.getElementById('message');
+    const fileInput = document.getElementById('fileInput');
+    const locationText = document.getElementById('locationText');
+    const mapFrame = document.getElementById('mapFrame');
+
+    let stream = null;
+    let latitude = null;
+    let longitude = null;
+
+    // 🗺️ Get Location
+    function getLocation() {
+      if (!navigator.geolocation) {
+        locationText.textContent = "❌ Geolocation not supported.";
+        return;
+      }
+      navigator.geolocation.getCurrentPosition(
+        (pos) => {
+          latitude = pos.coords.latitude;
+          longitude = pos.coords.longitude;
+          locationText.textContent = `📍 Lat: ${latitude.toFixed(5)}, Lng: ${longitude.toFixed(5)}`;
+          mapFrame.src = `https://www.google.com/maps?q=${latitude},${longitude}&z=17&output=embed`;
+        },
+        (err) => {
+          locationText.textContent = "⚠️ Unable to access location. Please allow permission.";
+        },
+        { enableHighAccuracy: true }
+      );
+    }
+
+    async function startCamera() {
+      try {
+        stream = await navigator.mediaDevices.getUserMedia({ video: true });
+        video.srcObject = stream;
+        video.style.display = "block";
+        canvas.style.display = "none";
+        video.play();
+      } catch (err) {
+        showMessage("Cannot access camera", "error");
+        console.error(err);
+      }
+    }
+
+    function showMessage(text, type = "success", callback = null) {
+      message.className = "";
+      message.textContent = text;
+
+      if (type === "success") message.classList.add("msg-success");
+      if (type === "warning") message.classList.add("msg-warning");
+      if (type === "error") message.classList.add("msg-error");
+
+      message.style.display = "block";
+      setTimeout(() => (message.style.opacity = 1), 50);
+
+      setTimeout(() => {
+        message.style.opacity = 0;
+        setTimeout(() => {
+          message.style.display = "none";
+          if (callback) callback();
+        }, 300);
+      }, 5000);
+    }
+
+    document.getElementById('startBtn').addEventListener('click', () => {
+      startCamera();
+      getLocation();
+    });
+
+    // 📸 Camera capture
+    document.getElementById('captureBtn').addEventListener('click', () => {
+      if (!stream) {
+        showMessage("Start camera first!", "error");
+        return;
+      }
+
+      canvas.width = video.videoWidth;
+      canvas.height = video.videoHeight;
+      context.drawImage(video, 0, 0, canvas.width, canvas.height);
+      canvas.style.display = "block";
+      video.pause();
+
+      canvas.toBlob(async (blob) => {
+        try {
+          const data = await uploadImage(blob, "attendance.jpg");
+          showMessage(data.message, data.status === "success" ? "success" : "error", () => {
+            canvas.style.display = "none";
+            video.play();
+          });
+        } catch (err) {
+          console.error(err);
+          showMessage("Failed to mark attendance.", "error", () => {
+            canvas.style.display = "none";
+            video.play();
+          });
         }
+      }, 'image/jpeg');
+    });
 
-        function showMessage(text, type = "success", callback = null) {
-            message.className = "";
-            message.textContent = text;
+    // 📤 File upload
+    document.getElementById('uploadBtn').addEventListener('click', async () => {
+      const file = fileInput.files[0];
+      if (!file) {
+        showMessage("Please select an image file first.", "error");
+        return;
+      }
+      try {
+        const data = await uploadImage(file, file.name);
+        showMessage(data.message, data.status === "success" ? "success" : "error");
+      } catch (err) {
+        console.error(err);
+        showMessage("Failed to mark attendance.", "error");
+      }
+    });
 
-            if (type === "success") message.classList.add("msg-success");
-            if (type === "warning") message.classList.add("msg-warning");
-            if (type === "error") message.classList.add("msg-error");
+    // 🧾 Upload image + location
+    async function uploadImage(file, filename) {
+      const formData = new FormData();
+      formData.append('image', file, filename);
+      if (latitude && longitude) {
+        formData.append('latitude', latitude);
+        formData.append('longitude', longitude);
+      }
 
-            message.style.display = "block";
-            setTimeout(() => (message.style.opacity = 1), 50);
+      const response = await fetch("{% url 'mark_attendance' %}", {
+        method: 'POST',
+        body: formData
+      });
+      return await response.json();
+    }
 
-            setTimeout(() => {
-                message.style.opacity = 0;
-                setTimeout(() => {
-                    message.style.display = "none";
-                    if (callback) callback();
-                }, 300);
-            }, 5000);
-        }
-
-        document.getElementById('startBtn').addEventListener('click', startCamera);
-
-        // Camera capture
-        document.getElementById('captureBtn').addEventListener('click', () => {
-            if (!stream) {
-                showMessage("Start camera first!", "error");
-                return;
-            }
-
-            canvas.width = video.videoWidth;
-            canvas.height = video.videoHeight;
-
-            context.drawImage(video, 0, 0, canvas.width, canvas.height);
-            canvas.style.display = "block";
-            video.pause(); // pause video so user sees captured image
-
-            canvas.toBlob(async (blob) => {
-                try {
-                    const data = await uploadImage(blob, "attendance.jpg");
-
-                    // Show only server-confirmed message (check-in/check-out)
-                    showMessage(data.message, data.type || (data.status === "success" ? "success" : "error"), () => {
-                        canvas.style.display = "none";
-                        video.play();
-                    });
-                } catch (err) {
-                    console.error(err);
-                    showMessage("Failed to mark attendance.", "error", () => {
-                        canvas.style.display = "none";
-                        video.play();
-                    });
-                }
-            }, 'image/jpeg');
-        });
-
-        // File upload
-        document.getElementById('uploadBtn').addEventListener('click', async () => {
-            const file = fileInput.files[0];
-            if (!file) {
-                showMessage("Please select an image file first.", "error");
-                return;
-            }
-            try {
-                const data = await uploadImage(file, file.name);
-                showMessage(data.message, data.type || (data.status === "success" ? "success" : "error"));
-            } catch (err) {
-                console.error(err);
-                showMessage("Failed to mark attendance.", "error");
-            }
-        });
-
-        // Upload image helper
-        async function uploadImage(file, filename) {
-            const formData = new FormData();
-            formData.append('image', file, filename);
-
-            try {
-                const response = await fetch("{% url 'mark_attendance' %}", {
-                    method: 'POST',
-                    body: formData
-                });
-                const data = await response.json();
-                return data; // return server response
-            } catch (err) {
-                console.error(err);
-                return { status: "error", message: "Failed to mark attendance." };
-            }
-        }
-    </script>
+    // Initialize location immediately
+    getLocation();
+  </script>
 </body>
 </html>
