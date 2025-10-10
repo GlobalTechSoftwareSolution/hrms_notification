@@ -1,4 +1,6 @@
 asgiref==3.9.2
+boto3==1.40.48
+botocore==1.40.48
 certifi==2025.8.3
 charset-normalizer==3.4.3
 click==8.3.0
@@ -6,6 +8,7 @@ colorama==0.4.6
 dj-database-url==3.0.1
 Django==5.2.6
 django-cors-headers==4.9.0
+django-storages==1.14.6
 djangorestframework==3.16.1
 djangorestframework_simplejwt==5.5.1
 dlib==20.0.0
@@ -15,15 +18,19 @@ geographiclib==2.1
 geopy==2.4.1
 gunicorn==23.0.0
 idna==3.10
+jmespath==1.0.1
 numpy==2.2.6
 opencv-python==4.12.0.88
 packaging==25.0
 pillow==11.3.0
 psycopg2-binary==2.9.10
 PyJWT==2.10.1
+python-dateutil==2.9.0.post0
 python-decouple==3.8
 pytz==2025.2
 requests==2.32.5
+s3transfer==0.14.0
+six==1.17.0
 sqlparse==0.5.3
 typing_extensions==4.15.0
 tzdata==2025.2

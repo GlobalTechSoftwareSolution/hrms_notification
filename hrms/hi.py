@@ -12,7 +12,7 @@ s3 = boto3.client(
 print(s3.list_buckets())
 
 # Upload a file
-s3.upload_file('code.png', 'hrms-media', 'code.png')
+s3.upload_file('code.png', 'hrms-media', 'images/code.png')
 
 # List objects
 print(s3.list_objects(Bucket='hrms-media'))

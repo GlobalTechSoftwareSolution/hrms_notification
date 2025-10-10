@@ -86,9 +86,6 @@ class Manager(models.Model):
         return f"{self.fullname} (Manager)"
 
 
-import os
-from django.db import models
-
 class Employee(models.Model):
     email = models.OneToOneField(User, on_delete=models.CASCADE, to_field='email', primary_key=True)
     fullname = models.CharField(max_length=255)
@@ -122,10 +119,12 @@ class Employee(models.Model):
         return f"{self.fullname} (Employee)"
 
     def save(self, *args, **kwargs):
+        # Only delete old file if it's a local file
         try:
             this = Employee.objects.get(pk=self.pk)
             if this.profile_picture and this.profile_picture != self.profile_picture:
-                this.profile_picture.delete(save=False)
+                if not str(this.profile_picture).startswith("http"):
+                    this.profile_picture.delete(save=False)
         except Employee.DoesNotExist:
             pass
         super(Employee, self).save(*args, **kwargs)
@@ -139,17 +138,24 @@ class Document(models.Model):
     tenth = models.FileField(upload_to='documents/10th/', null=True, blank=True)
     twelth = models.FileField(upload_to='documents/12th/', null=True, blank=True)
     degree = models.FileField(upload_to='documents/degree/', null=True, blank=True)
+    masters = models.FileField(upload_to='documents/masters/', null=True, blank=True)
     marks_card = models.FileField(upload_to='documents/marks_cards/', null=True, blank=True)
+    certificates = models.FileField(upload_to='documents/certificates/', null=True, blank=True)
     award = models.FileField(upload_to='documents/awards/', null=True, blank=True)
     resume = models.FileField(upload_to='documents/resumes/', null=True, blank=True)
     id_proof = models.FileField(upload_to='documents/id_proofs/', null=True, blank=True)
+    appointment_letter = models.FileField(upload_to='documents/appointment_letters/', null=True, blank=True)
+    offer_letter = models.FileField(upload_to='documents/offer_letters/', null=True, blank=True)
+    releaving_letter = models.FileField(upload_to='documents/releaving_letters/', null=True, blank=True)
+    resignation_letter = models.FileField(upload_to='documents/resignation_letters/', null=True, blank=True)
+    achievement_crt = models.FileField(upload_to='documents/achievement_certificates/', null=True, blank=True)
+    bonafide_crt = models.FileField(upload_to='documents/bonafide_certificates/', null=True, blank=True)
 
     uploaded_at = models.DateTimeField(auto_now_add=True)
 
-    def _str_(self):
+    def __str__(self):
         return f"Documents for {self.email}"
-    
-from django.db import models
+
 
 class Award(models.Model):
     email = models.ForeignKey(
@@ -390,3 +396,6 @@ class Notice(models.Model):
 
     def __str__(self):
         return self.title
+    
+class myuser(models.Model):
+    username = models.CharField(max_length=100)

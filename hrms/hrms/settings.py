@@ -197,7 +197,7 @@ import os
 # MEDIA_URL = '/media/'
 # MEDIA_ROOT = os.path.join(BASE_DIR, 'media')
 
-MEDIA_URL = 'http://194.238.19.109:9000/hrms-media/'
+# MEDIA_URL = 'http://194.238.19.109:9000/hrms-media/'
 
 FRONTEND_URL = "https://globaltechsoftwaresolutions.cloud"
 DEFAULT_FROM_EMAIL = "no-reply@globaltechsoftwaresolutions.cloud"
@@ -212,11 +212,12 @@ DEFAULT_FROM_EMAIL = EMAIL_HOST_USER
 
 # --- MinIO (S3 Compatible) Storage Configuration ---
 DEFAULT_FILE_STORAGE = 'storages.backends.s3boto3.S3Boto3Storage'
-AWS_QUERYSTRING_AUTH = False
 AWS_ACCESS_KEY_ID = 'djangouser'
 AWS_SECRET_ACCESS_KEY = 'django_secret_key'
-AWS_STORAGE_BUCKET_NAME = 'hrms-media'   # change if your bucket name differs
+AWS_STORAGE_BUCKET_NAME = 'hrms-media'
 AWS_S3_ENDPOINT_URL = 'http://194.238.19.109:9000'
-AWS_S3_REGION_NAME = 'us-east-1'  # any string works for MinIO
+AWS_S3_REGION_NAME = 'us-east-1'
 AWS_S3_SIGNATURE_VERSION = 's3v4'
 AWS_S3_ADDRESSING_STYLE = "path"
+
+MEDIA_URL = 'http://194.238.19.109:9000/hrms-media/'
