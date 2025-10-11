@@ -21,6 +21,7 @@ from django.contrib.sites.shortcuts import get_current_site
 from django.template.loader import render_to_string
 from django.db.models import Q
 from django.shortcuts import get_object_or_404
+from django.http.multipartparser import MultiPartParser, MultiPartParserError
 
 from rest_framework import status, viewsets, generics
 from rest_framework.views import APIView
@@ -269,24 +270,43 @@ def handle_delete(request, ModelClass):
         email = data.get("email")
         if not email:
             return JsonResponse({"error": "Email field is required"}, status=400)
-        
-        # Get the instance in role table
+
+        # Get instance in the given model (Employee, Manager, etc.)
         instance = ModelClass.objects.get(email=email)
+
+        # Delete associated image from MinIO if exists
+        client = get_s3_client()
+        bucket_name = "hrms-media"
+        base_url = f"http://194.238.19.109:9000/{bucket_name}/"
+
+        if hasattr(instance, "profile_picture") and instance.profile_picture:
+            file_url = instance.profile_picture
+            if file_url.startswith(base_url):
+                key = file_url.replace(base_url, "")
+                try:
+                    client.delete_object(Bucket=bucket_name, Key=key)
+                    print(f"Deleted file from MinIO: {key}")
+                except Exception as e:
+                    print(f"Failed to delete file {key}: {e}")
+
+        # Delete instance from role table
         instance.delete()
-        print(f"Deleted {ModelClass.name} record with email {email}")
-        
-        # Also delete corresponding User record
-        from accounts.models import User  # import User model
+        print(f"Deleted {ModelClass.__name__} record with email {email}")
+
+        # Delete corresponding User record
+        from accounts.models import User
         try:
             user = User.objects.get(email=email)
             user.delete()
             print(f"Deleted User record with email {email}")
         except User.DoesNotExist:
             print(f"No User record found to delete for email {email}")
-        
-        return JsonResponse({"message": f"{ModelClass.name} and User deleted successfully"})
+
+        return JsonResponse({
+            "message": f"{ModelClass.__name__} and User deleted successfully"
+        })
     except ModelClass.DoesNotExist:
-        return JsonResponse({"error": f"{ModelClass.name} not found"}, status=404)
+        return JsonResponse({"error": f"{ModelClass.__name__} not found"}, status=404)
 
 
 class UserViewSet(viewsets.ModelViewSet):
@@ -308,20 +328,26 @@ class EmployeeViewSet(viewsets.ModelViewSet):
         employee = self.get_object()
         updated = False
 
-        # MinIO client
         client = get_s3_client()
         bucket_name = 'hrms-media'
 
-        # Handle profile_picture if provided
+        # Handle profile_picture replacement
         if 'profile_picture' in request.FILES:
             file_obj = request.FILES['profile_picture']
             key = f'images/{employee.email}/profile_picture.{file_obj.name.split(".")[-1]}'
 
-            # Upload to MinIO
-            client.upload_fileobj(file_obj, bucket_name, key)
+            # Delete old profile picture if exists
+            if employee.profile_picture:
+                old_key = employee.profile_picture.split(f"http://194.238.19.109:9000/{bucket_name}/")[-1]
+                try:
+                    client.delete_object(Bucket=bucket_name, Key=old_key)
+                    print(f"Deleted old profile picture from MinIO: {old_key}")
+                except Exception as e:
+                    print(f"Failed to delete old profile picture: {e}")
 
-            # Store full URL in URLField
-            employee.profile_picture = f'http://194.238.19.109:9000/{bucket_name}/{key}'
+            # Upload new profile picture
+            client.upload_fileobj(file_obj, bucket_name, key)
+            employee.profile_picture = f"http://194.238.19.109:9000/{bucket_name}/{key}"
             updated = True
 
         # Update other fields
@@ -329,7 +355,7 @@ class EmployeeViewSet(viewsets.ModelViewSet):
             if hasattr(employee, field) and field != 'profile_picture':
                 # Special handling for ForeignKey fields
                 if field == 'reports_to':
-                    if value:  # not null
+                    if value:
                         try:
                             manager = Manager.objects.get(email=value)
                             setattr(employee, field, manager)
@@ -363,15 +389,38 @@ class EmployeeViewSet(viewsets.ModelViewSet):
             bucket_name = 'hrms-media'
             ext = profile_file.name.split(".")[-1]
             key = f'images/{employee.email}/profile_picture.{ext}'
-            print("Uploading to:", key)
-            client.upload_fileobj(profile_file, bucket_name, key)
-            print("Upload successful")
 
-            employee.profile_picture = f'http://194.238.19.109:9000/{bucket_name}/{key}'
+            # Upload to MinIO
+            client.upload_fileobj(profile_file, bucket_name, key)
+            employee.profile_picture = f"http://194.238.19.109:9000/{bucket_name}/{key}"
             employee.save()
 
         serializer = EmployeeSerializer(employee)
         return Response(serializer.data, status=status.HTTP_201_CREATED)
+
+    def destroy(self, request, *args, **kwargs):
+        employee = self.get_object()
+        email_str = employee.email.email if employee.email else "Unknown"
+
+        client = get_s3_client()
+        bucket_name = 'hrms-media'
+
+        # Delete profile picture from MinIO
+        if employee.profile_picture:
+            old_key = employee.profile_picture.split(f"http://194.238.19.109:9000/{bucket_name}/")[-1]
+            try:
+                client.delete_object(Bucket=bucket_name, Key=old_key)
+                print(f"Deleted profile picture from MinIO: {old_key}")
+            except Exception as e:
+                print(f"Failed to delete profile picture: {e}")
+
+        # Delete Employee (post_delete signal will handle deleting the User)
+        employee.delete()
+
+        return Response(
+            {"message": f"Employee {email_str} and profile picture deleted successfully"},
+            status=200
+        )
 
 
 class DepartmentViewSet(viewsets.ModelViewSet):
@@ -1245,57 +1294,107 @@ def create_document(request):
 
 @csrf_exempt
 def update_document(request, email):
-    if request.method in ["POST", "PATCH"]:
-        user = get_object_or_404(User, email=email)
-        doc = Document.objects.filter(email=user).last()
-        if not doc:
-            # If no document exists, create new one
-            doc = Document.objects.create(email=user)
+    if request.method != "PATCH":
+        return JsonResponse({"error": "Method not allowed"}, status=405)
 
-        # Folder name = email prefix
-        folder_name = email.split("@")[0].lower()
+    user = get_object_or_404(User, email=email)
 
-        client = get_s3_client()
-        bucket_name = 'hrms-media'
-        base_url = f"http://194.238.19.109:9000/{bucket_name}/"
+    # 🔹 Parse multipart form-data manually for PATCH
+    try:
+        parser = MultiPartParser(request.META, request, request.upload_handlers, request.encoding)
+        data, files = parser.parse()
+    except MultiPartParserError as e:
+        return JsonResponse({"error": f"Failed to parse multipart data: {e}"}, status=400)
 
-        document_fields = [
-            "tenth", "twelth", "degree", "masters", "marks_card", "certificates",
-            "award", "resume", "id_proof", "appointment_letter", "offer_letter",
-            "releaving_letter", "resignation_letter", "achievement_crt", "bonafide_crt"
-        ]
+    print("FILES RECEIVED:", files)
+    print("DATA RECEIVED:", data)
 
-        for field in document_fields:
-            file_obj = request.FILES.get(field)
-            if file_obj:
-                ext = file_obj.name.split('.')[-1]
-                key = f"documents/{folder_name}/{field}.{ext}"
+    # 🔹 Ensure one document per user
+    doc, _ = Document.objects.get_or_create(email=user)
+    Document.objects.filter(email=user).exclude(id=doc.id).delete()
 
-                # Delete old file if exists
-                old_file_url = getattr(doc, field)
-                if old_file_url and old_file_url.startswith(base_url):
-                    old_key = old_file_url.replace(base_url, "")
-                    try:
-                        client.delete_object(Bucket=bucket_name, Key=old_key)
-                    except Exception as e:
-                        print(f"Failed to delete old file {old_key}: {e}")
+    folder_name = email.split("@")[0].lower()
+    client = get_s3_client()
+    bucket_name = "hrms-media"
+    base_url = f"http://194.238.19.109:9000/{bucket_name}/"
 
-                # Upload new file
-                client.upload_fileobj(file_obj, bucket_name, key)
-                setattr(doc, field, f"{base_url}{key}")
+    document_fields = [
+        "tenth", "twelth", "degree", "masters", "marks_card", "certificates",
+        "award", "resume", "id_proof", "appointment_letter", "offer_letter",
+        "releaving_letter", "resignation_letter", "achievement_crt", "bonafide_crt",
+    ]
 
+    updated_files = {}
+
+    for field in document_fields:
+        file_obj = files.get(field)
+        if not file_obj:
+            continue
+
+        ext = file_obj.name.split(".")[-1]
+        key = f"documents/{folder_name}/{field}.{ext}"
+
+        # Delete old file if exists
+        old_file_url = getattr(doc, field)
+        if old_file_url and old_file_url.startswith(base_url):
+            old_key = old_file_url.replace(base_url, "")
+            try:
+                client.delete_object(Bucket=bucket_name, Key=old_key)
+            except Exception as e:
+                print(f"Failed to delete old file {old_key}: {e}")
+
+        # Upload new file
+        client.upload_fileobj(file_obj, bucket_name, key)
+        new_url = f"{base_url}{key}"
+        setattr(doc, field, new_url)
+        updated_files[field] = new_url
+
+    if updated_files:
         doc.save()
-        return JsonResponse({"message": "Document updated successfully"})
+        return JsonResponse({"message": "Document(s) updated successfully", "updated_files": updated_files})
+    else:
+        return JsonResponse({"message": "No files uploaded"}, status=400)
 
 
 @csrf_exempt
 def delete_document(request, email):
-    if request.method == "DELETE":
-        user = get_object_or_404(User, email=email)
-        documents = Document.objects.filter(email=user)
-        count = documents.count()
-        documents.delete()
-        return JsonResponse({"message": f"{count} document(s) deleted successfully"})
+    if request.method != "DELETE":
+        return JsonResponse({"error": "Method not allowed"}, status=405)
+
+    user = get_object_or_404(User, email=email)
+    documents = Document.objects.filter(email=user)
+
+    if not documents.exists():
+        return JsonResponse({"message": "No documents found for this user"}, status=404)
+
+    client = get_s3_client()
+    bucket_name = "hrms-media"
+    base_url = f"http://194.238.19.109:9000/{bucket_name}/"
+
+    deleted_files = []
+
+    # Loop through all document records for this user (should normally be 1)
+    for doc in documents:
+        for field in [
+            "tenth", "twelth", "degree", "masters", "marks_card", "certificates",
+            "award", "resume", "id_proof", "appointment_letter", "offer_letter",
+            "releaving_letter", "resignation_letter", "achievement_crt", "bonafide_crt",
+        ]:
+            file_url = getattr(doc, field)
+            if file_url and file_url.startswith(base_url):
+                key = file_url.replace(base_url, "")
+                try:
+                    client.delete_object(Bucket=bucket_name, Key=key)
+                    deleted_files.append(key)
+                except Exception as e:
+                    print(f"Failed to delete {key}: {e}")
+
+        doc.delete()  # Delete DB record
+
+    return JsonResponse({
+        "message": f"{len(deleted_files)} file(s) and document record(s) deleted successfully",
+        "deleted_files": deleted_files
+    })
 
 
 @csrf_exempt
@@ -1571,6 +1670,7 @@ class RequestPasswordResetView(APIView):
         )
 
         return Response({'message': 'Password reset link sent successfully'}, status=status.HTTP_200_OK)
+
 
 class PasswordResetConfirmView(APIView):
     def post(self, request, uidb64, token):

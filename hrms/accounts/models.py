@@ -141,8 +141,11 @@ class Employee(models.Model):
 
 
 class Document(models.Model):
-    email = models.ForeignKey(
-        'User', on_delete=models.CASCADE, to_field='email', related_name='documents'
+    email = models.OneToOneField(
+        'User',  # link to your custom User model
+        on_delete=models.CASCADE,
+        to_field='email',
+        related_name='document'  # access with user.document
     )
 
     tenth = models.URLField(null=True, blank=True)
@@ -164,7 +167,7 @@ class Document(models.Model):
     uploaded_at = models.DateTimeField(auto_now_add=True)
 
     def __str__(self):
-        return f"Documents for {self.email}"
+        return f"Documents for {self.email.email}"
 
 
 class Award(models.Model):
