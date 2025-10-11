@@ -96,7 +96,7 @@ class Employee(models.Model):
     date_joined = models.DateField(null=True, blank=True)
     reports_to = models.ForeignKey('Manager', on_delete=models.SET_NULL, to_field='email', null=True, blank=True)
     skills = models.TextField(null=True, blank=True)
-    profile_picture = models.ImageField(upload_to='images/', null=True, blank=True)
+    profile_picture = models.URLField(null=True, blank=True)
     gender = models.CharField(max_length=20, null=True, blank=True)
     marital_status = models.CharField(max_length=20, null=True, blank=True)
     nationality = models.CharField(max_length=50, null=True, blank=True)
@@ -135,21 +135,21 @@ class Document(models.Model):
         'User', on_delete=models.CASCADE, to_field='email', related_name='documents'
     )
 
-    tenth = models.FileField(upload_to='documents/10th/', null=True, blank=True)
-    twelth = models.FileField(upload_to='documents/12th/', null=True, blank=True)
-    degree = models.FileField(upload_to='documents/degree/', null=True, blank=True)
-    masters = models.FileField(upload_to='documents/masters/', null=True, blank=True)
-    marks_card = models.FileField(upload_to='documents/marks_cards/', null=True, blank=True)
-    certificates = models.FileField(upload_to='documents/certificates/', null=True, blank=True)
-    award = models.FileField(upload_to='documents/awards/', null=True, blank=True)
-    resume = models.FileField(upload_to='documents/resumes/', null=True, blank=True)
-    id_proof = models.FileField(upload_to='documents/id_proofs/', null=True, blank=True)
-    appointment_letter = models.FileField(upload_to='documents/appointment_letters/', null=True, blank=True)
-    offer_letter = models.FileField(upload_to='documents/offer_letters/', null=True, blank=True)
-    releaving_letter = models.FileField(upload_to='documents/releaving_letters/', null=True, blank=True)
-    resignation_letter = models.FileField(upload_to='documents/resignation_letters/', null=True, blank=True)
-    achievement_crt = models.FileField(upload_to='documents/achievement_certificates/', null=True, blank=True)
-    bonafide_crt = models.FileField(upload_to='documents/bonafide_certificates/', null=True, blank=True)
+    tenth = models.URLField(null=True, blank=True)
+    twelth = models.URLField(null=True, blank=True)
+    degree = models.URLField(null=True, blank=True)
+    masters = models.URLField(null=True, blank=True)
+    marks_card = models.URLField(null=True, blank=True)
+    certificates = models.URLField(null=True, blank=True)
+    award = models.URLField(null=True, blank=True)
+    resume = models.URLField(null=True, blank=True)
+    id_proof = models.URLField(null=True, blank=True)
+    appointment_letter = models.URLField(null=True, blank=True)
+    offer_letter = models.URLField(null=True, blank=True)
+    releaving_letter = models.URLField(null=True, blank=True)
+    resignation_letter = models.URLField(null=True, blank=True)
+    achievement_crt = models.URLField(null=True, blank=True)
+    bonafide_crt = models.URLField(null=True, blank=True)
 
     uploaded_at = models.DateTimeField(auto_now_add=True)
 
@@ -397,5 +397,5 @@ class Notice(models.Model):
     def __str__(self):
         return self.title
     
-class myuser(models.Model):
-    username = models.CharField(max_length=100)
+# class my_user(models.Model):
+#     username = models.CharField(max_length=100)

@@ -23,8 +23,6 @@ from django.template.loader import render_to_string
 from django.db.models import Q
 from django.shortcuts import get_object_or_404
 
-
-
 from rest_framework import status, viewsets, generics
 from rest_framework.views import APIView
 from rest_framework.response import Response
@@ -120,9 +118,6 @@ def reject_user(request):
         return Response({'error': 'User not found'}, status=status.HTTP_404_NOT_FOUND)
 
 
-# =====================
-# Helper: get email by username (partial match)
-# =====================
 def get_email_by_username(username):
     username = username.lower()
     for model in [HR, Employee, CEO, Manager, Admin]:
@@ -136,9 +131,6 @@ def get_email_by_username(username):
     return None
 
 
-# =====================
-# Check if email exists
-# =====================
 def is_email_exists(email):
     exists = any([
         HR.objects.filter(email=email).exists(),
@@ -151,9 +143,6 @@ def is_email_exists(email):
     return exists
 
 
-# =====================
-# Mark attendance by email
-# =====================
 OFFICE_LAT = 13.068906816007116
 OFFICE_LON = 77.55541294505542
 LOCATION_RADIUS_METERS = 100  # 100m allowed radius
@@ -215,9 +204,6 @@ def mark_attendance_by_email(email_str, latitude=None, longitude=None):
     return attendance
 
 
-# =====================
-# Today attendance view
-# =====================
 def today_attendance(request):
     today = timezone.localdate()
     attendances = Attendance.objects.filter(date=today)
@@ -301,11 +287,53 @@ class EmployeeViewSet(viewsets.ModelViewSet):
 
     def partial_update(self, request, *args, **kwargs):
         employee = self.get_object()
+        updated = False
 
+        # MinIO client
+        client = boto3.client(
+            's3',
+            endpoint_url='http://194.238.19.109:9000',
+            aws_access_key_id='djangouser',
+            aws_secret_access_key='django_secret_key',
+        )
+        bucket_name = 'hrms-media'
+
+        # Handle profile_picture if provided
         if 'profile_picture' in request.FILES:
             file_obj = request.FILES['profile_picture']
+            key = f'images/{employee.email}/profile_picture.{file_obj.name.split(".")[-1]}'
 
-            # MinIO client
+            # Upload to MinIO
+            client.upload_fileobj(file_obj, bucket_name, key)
+
+            # Store full URL in URLField
+            employee.profile_picture = f'http://194.238.19.109:9000/{bucket_name}/{key}'
+            updated = True
+
+        # Update other fields
+        for field, value in request.data.items():
+            if hasattr(employee, field) and field != 'profile_picture':
+                setattr(employee, field, value)
+                updated = True
+
+        if updated:
+            employee.save()
+
+        serializer = EmployeeSerializer(employee)
+        return Response(serializer.data, status=status.HTTP_200_OK)
+
+    def update(self, request, *args, **kwargs):
+        return self.partial_update(request, *args, **kwargs)
+
+    def create(self, request, *args, **kwargs):
+        data = request.data.copy()
+        profile_file = request.FILES.get('profile_picture')
+
+        serializer = EmployeeSerializer(data=data)
+        serializer.is_valid(raise_exception=True)
+        employee = serializer.save()
+
+        if profile_file:
             client = boto3.client(
                 's3',
                 endpoint_url='http://194.238.19.109:9000',
@@ -313,18 +341,18 @@ class EmployeeViewSet(viewsets.ModelViewSet):
                 aws_secret_access_key='django_secret_key',
             )
             bucket_name = 'hrms-media'
-            key = f'images/{file_obj.name}'  # Store in images/ folder
-            client.upload_fileobj(file_obj, bucket_name, key)
+            ext = profile_file.name.split(".")[-1]
+            key = f'images/{employee.email}/profile_picture.{ext}'
+            print("Uploading to:", key)
+            client.upload_fileobj(profile_file, bucket_name, key)
+            print("Upload successful")
 
-            # Save the MinIO URL in the model
             employee.profile_picture = f'http://194.238.19.109:9000/{bucket_name}/{key}'
             employee.save()
 
-            serializer = self.get_serializer(employee)
-            return Response(serializer.data, status=status.HTTP_200_OK)
-        else:
-            return Response({"error": "No profile_picture provided"}, status=status.HTTP_400_BAD_REQUEST)
-
+        serializer = EmployeeSerializer(employee)
+        return Response(serializer.data, status=status.HTTP_201_CREATED)
+    
 
 class HRViewSet(viewsets.ModelViewSet):
     queryset = HR.objects.all()
@@ -632,9 +660,6 @@ def list_payrolls(request):
     return JsonResponse({"payrolls": result}, status=200)
 
 
-# ----------------------------
-# List all tasks
-# ----------------------------
 @require_GET
 def list_tasks(request):
     tasks = TaskTable.objects.all().order_by('-created_at')
@@ -660,9 +685,6 @@ def list_tasks(request):
     return JsonResponse({"tasks": result}, status=200)
 
 
-# ----------------------------
-# Get single task by id
-# ----------------------------
 @require_GET
 def get_task(request, task_id):
     try:
@@ -687,9 +709,6 @@ def get_task(request, task_id):
         return JsonResponse({"error": "Task not found"}, status=404)
 
 
-# ----------------------------
-# Update task by id
-# ----------------------------
 @csrf_exempt
 @require_http_methods(["PUT"])
 def update_task(request, task_id):
@@ -720,9 +739,6 @@ def update_task(request, task_id):
         return JsonResponse({"error": "Task not found"}, status=404)
 
 
-# ----------------------------
-# Delete task by id
-# ----------------------------
 @csrf_exempt
 @require_http_methods(["DELETE"])
 def delete_task(request, task_id):
@@ -1166,7 +1182,9 @@ def create_document(request):
         email = request.POST.get("email")
         user = get_object_or_404(User, email=email)
 
-        # Initialize MinIO client
+        # Use email prefix as folder name
+        folder_name = email.split("@")[0].lower()
+
         client = boto3.client(
             's3',
             endpoint_url='http://194.238.19.109:9000',
@@ -1174,110 +1192,132 @@ def create_document(request):
             aws_secret_access_key='django_secret_key',
         )
         bucket_name = 'hrms-media'
+        base_url = f"http://194.238.19.109:9000/{bucket_name}/"
         uploaded_files = {}
 
-        # List all fields from the Document model
         document_fields = [
             "tenth", "twelth", "degree", "masters", "marks_card", "certificates",
             "award", "resume", "id_proof", "appointment_letter", "offer_letter",
             "releaving_letter", "resignation_letter", "achievement_crt", "bonafide_crt"
         ]
 
-        # Upload files to MinIO and store URLs
         for field in document_fields:
             file_obj = request.FILES.get(field)
             if file_obj:
-                key = f'documents/{field}/{file_obj.name}'
+                ext = file_obj.name.split('.')[-1]  # file extension
+                key = f"documents/{folder_name}/{field}.{ext}"  # fixed file name
                 client.upload_fileobj(file_obj, bucket_name, key)
-                uploaded_files[field] = f'http://194.238.19.109:9000/{bucket_name}/{key}'
+                uploaded_files[field] = f"{base_url}{key}"
 
-        # Create Document instance with MinIO URLs
+        # Create new Document
         document = Document.objects.create(
             email=user,
             **{field: uploaded_files.get(field) for field in document_fields}
         )
 
         return JsonResponse({
-            "message": "Document created",
+            "message": "Document created successfully",
             "id": document.id,
             "urls": uploaded_files
         })
 
 
-def list_documents(request):
-    documents = Document.objects.all()
-    data = []
-    
-    document_fields = [
-        "tenth", "twelth", "degree", "masters", "marks_card", "certificates",
-        "award", "resume", "id_proof", "appointment_letter", "offer_letter",
-        "releaving_letter", "resignation_letter", "achievement_crt", "bonafide_crt"
-    ]
-
-    for doc in documents:
-        doc_data = {
-            "id": doc.id,
-            "email": doc.email.email,
-        }
-        for field in document_fields:
-            file_field = getattr(doc, field)
-            doc_data[field] = file_field.url if file_field else None
-
-        data.append(doc_data)
-
-    return JsonResponse(data, safe=False)
-
-
-def get_document(request, id):
-    doc = get_object_or_404(Document, id=id)
-
-    document_fields = [
-        "tenth", "twelth", "degree", "masters", "marks_card", "certificates",
-        "award", "resume", "id_proof", "appointment_letter", "offer_letter",
-        "releaving_letter", "resignation_letter", "achievement_crt", "bonafide_crt"
-    ]
-
-    data = {
-        "id": doc.id,
-        "email": doc.email.email,
-    }
-    for field in document_fields:
-        file_field = getattr(doc, field)
-        data[field] = file_field.url if file_field else None
-
-    return JsonResponse(data)
-
-
 @csrf_exempt
-def update_document(request, id):
+def update_document(request, email):
     if request.method in ["POST", "PATCH"]:
-        doc = get_object_or_404(Document, id=id)
+        user = get_object_or_404(User, email=email)
+        doc = Document.objects.filter(email=user).last()
+        if not doc:
+            # If no document exists, create new one
+            doc = Document.objects.create(email=user)
 
-        # List all fields from your updated Document model
+        # Folder name = email prefix
+        folder_name = email.split("@")[0].lower()
+
+        client = boto3.client(
+            's3',
+            endpoint_url='http://194.238.19.109:9000',
+            aws_access_key_id='djangouser',
+            aws_secret_access_key='django_secret_key',
+        )
+        bucket_name = 'hrms-media'
+        base_url = f"http://194.238.19.109:9000/{bucket_name}/"
+
         document_fields = [
             "tenth", "twelth", "degree", "masters", "marks_card", "certificates",
             "award", "resume", "id_proof", "appointment_letter", "offer_letter",
             "releaving_letter", "resignation_letter", "achievement_crt", "bonafide_crt"
         ]
 
-        # Update fields if new file is uploaded
         for field in document_fields:
-            if request.FILES.get(field):
-                setattr(doc, field, request.FILES.get(field))
+            file_obj = request.FILES.get(field)
+            if file_obj:
+                ext = file_obj.name.split('.')[-1]
+                key = f"documents/{folder_name}/{field}.{ext}"
+
+                # Delete old file if exists
+                old_file_url = getattr(doc, field)
+                if old_file_url and old_file_url.startswith(base_url):
+                    old_key = old_file_url.replace(base_url, "")
+                    try:
+                        client.delete_object(Bucket=bucket_name, Key=old_key)
+                    except Exception as e:
+                        print(f"Failed to delete old file {old_key}: {e}")
+
+                # Upload new file
+                client.upload_fileobj(file_obj, bucket_name, key)
+                setattr(doc, field, f"{base_url}{key}")
 
         doc.save()
-        return JsonResponse({"message": "Document updated"})
+        return JsonResponse({"message": "Document updated successfully"})
 
 
 @csrf_exempt
-def delete_document(request, id):
+def delete_document(request, email):
     if request.method == "DELETE":
-        doc = get_object_or_404(Document, id=id)
-        doc.delete()
-        return JsonResponse({"message": "Document deleted"})
+        user = get_object_or_404(User, email=email)
+        documents = Document.objects.filter(email=user)
+        count = documents.count()
+        documents.delete()
+        return JsonResponse({"message": f"{count} document(s) deleted successfully"})
 
 
-# ------------------------ AWARDS ------------------------
+@csrf_exempt
+def list_documents(request):
+    documents = Document.objects.all()
+    data = []
+
+    for doc in documents:
+        doc_data = {"id": doc.id, "email": doc.email.email}
+        for field in doc._meta.get_fields():
+            if field.name in ["id", "email", "uploaded_at"]:
+                continue
+            file_value = getattr(doc, field.name)
+            doc_data[field.name] = file_value if file_value else None
+        data.append(doc_data)
+
+    return JsonResponse(data, safe=False)
+
+
+@csrf_exempt
+def get_document(request, email):
+    user = get_object_or_404(User, email=email)
+    documents = Document.objects.filter(email=user)
+    if not documents.exists():
+        return JsonResponse({"message": "No documents found"}, status=404)
+
+    data = []
+    for doc in documents:
+        doc_data = {"email": user.email}
+        for field in doc._meta.get_fields():
+            if field.name in ["id", "email", "uploaded_at"]:
+                continue
+            file_value = getattr(doc, field.name)
+            doc_data[field.name] = file_value if file_value else None
+        data.append(doc_data)
+
+    return JsonResponse(data, safe=False)
+
 
 @csrf_exempt
 def create_award(request):
@@ -1530,47 +1570,3 @@ class PasswordResetConfirmView(APIView):
         user.save()
         return Response({'message': 'Password has been reset successfully'}, status=status.HTTP_200_OK)
 
-
-
-
-
-
-        # MINI O UPLOAD
-
-
-@csrf_exempt
-def create_document_minio(request):
-    if request.method == "POST":
-        email = request.POST.get("email")
-        user = get_object_or_404(User, email=email)
-
-        import boto3
-        client = boto3.client(
-            's3',
-            endpoint_url='http://194.238.19.109:9000',
-            aws_access_key_id='djangouser',
-            aws_secret_access_key='django_secret_key',
-        )
-
-        uploaded_files = {}
-        bucket_name = 'hrms-media'
-
-        for field in ["tenth", "twelth", "degree", "marks_card", "award", "resume", "id_proof"]:
-            file_obj = request.FILES.get(field)
-            if file_obj:
-                key = f'documents/{field}/{file_obj.name}'
-                client.upload_fileobj(file_obj, bucket_name, key)
-                uploaded_files[field] = f'http://194.238.19.109:9000/{bucket_name}/{key}'
-
-        doc = Document.objects.create(
-            email=user,
-            tenth=uploaded_files.get("tenth"),
-            twelth=uploaded_files.get("twelth"),
-            degree=uploaded_files.get("degree"),
-            marks_card=uploaded_files.get("marks_card"),
-            award=uploaded_files.get("award"),
-            resume=uploaded_files.get("resume"),
-            id_proof=uploaded_files.get("id_proof"),
-        )
-
-        return JsonResponse({"message": "Document created", "id": doc.id, "urls": uploaded_files})

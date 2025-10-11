@@ -14,7 +14,6 @@ from accounts.views import (
     create_award, list_awards, get_award, update_award, delete_award,
     attendance_page, mark_attendance_view, RequestPasswordResetView, PasswordResetConfirmView
 )
-from .views import create_document_minio
 
 
 urlpatterns = [
@@ -77,9 +76,9 @@ urlpatterns = [
 
     path('create_document/', create_document, name='create_document'),
     path('list_documents/', list_documents, name='list_documents'),
-    path('get_document/<int:id>/', get_document, name='get_document'),
-    path('update_document/<int:id>/', update_document, name='update_document'),
-    path('delete_document/<int:id>/', delete_document, name='delete_document'),
+    path('get_document/<str:email>/', get_document, name='get_document'),
+    path('update_document/<str:email>/', update_document, name='update_document'),
+    path('delete_document/<str:email>/', delete_document, name='delete_document'),
 
     path('create_award/', create_award, name='create_award'),
     path('list_awards/', list_awards, name='list_awards'),
@@ -95,9 +94,4 @@ urlpatterns = [
 
     path('password_reset/', RequestPasswordResetView.as_view(), name='password-reset'),
     path('password_reset_confirm/<uidb64>/<token>/', PasswordResetConfirmView.as_view(), name='password-reset-confirm'),
-
-
-
-    path('documents/upload/', create_document_minio, name='create_document_minio'),
-
 ]
