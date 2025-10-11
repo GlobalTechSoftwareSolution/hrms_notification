@@ -30,20 +30,47 @@ from rest_framework.decorators import api_view, permission_classes
 
 # Models
 from .models import (
-    User, CEO, HR, Manager, Employee, Attendance, Admin,
+    User, CEO, HR, Manager, Department, Employee, Attendance, Admin,
     Leave, Payroll, TaskTable, Project, Notice, Report,
     Document, Award
 )
 
 # Serializers
 from .serializers import (
-    UserSerializer, CEOSerializer, HRSerializer, ManagerSerializer,
+    UserSerializer, CEOSerializer, HRSerializer, ManagerSerializer, DepartmentSerializer,
     EmployeeSerializer, SuperUserCreateSerializer, UserRegistrationSerializer,
     AdminSerializer, ReportSerializer, RegisterSerializer, DocumentSerializer, AwardSerializer
 )
 
 # Ensure User model points to custom one
 User = get_user_model()
+
+# Constants
+OFFICE_LAT = 13.068906816007116
+OFFICE_LON = 77.55541294505542
+LOCATION_RADIUS_METERS = 100  # 100m allowed radius
+IST = pytz.timezone("Asia/Kolkata")
+
+# Utility functions
+def get_s3_client():
+    """Get configured S3 client for MinIO"""
+    return boto3.client(
+        's3',
+        endpoint_url='http://194.238.19.109:9000',
+        aws_access_key_id='djangouser',
+        aws_secret_access_key='django_secret_key',
+    )
+
+def verify_location(latitude, longitude, radius_meters=None):
+    """Verify if user is within allowed radius of office"""
+    if radius_meters is None:
+        radius_meters = LOCATION_RADIUS_METERS
+    
+    user_location = (latitude, longitude)
+    office_location = (OFFICE_LAT, OFFICE_LON)
+    distance_meters = geodesic(user_location, office_location).meters
+    
+    return distance_meters <= radius_meters, distance_meters
 
 
 class SignupView(APIView):
@@ -142,11 +169,6 @@ def is_email_exists(email):
     return exists
 
 
-OFFICE_LAT = 13.068906816007116
-OFFICE_LON = 77.55541294505542
-LOCATION_RADIUS_METERS = 100  # 100m allowed radius
-
-IST = pytz.timezone("Asia/Kolkata")
 
 def mark_attendance_by_email(email_str, latitude=None, longitude=None):
     """
@@ -161,11 +183,9 @@ def mark_attendance_by_email(email_str, latitude=None, longitude=None):
         print("[mark_attendance_by_email] Location not provided — attendance not marked.")
         return None
 
-    user_location = (latitude, longitude)
-    office_location = (OFFICE_LAT, OFFICE_LON)
-    distance_meters = geodesic(user_location, office_location).meters
-
-    if distance_meters > LOCATION_RADIUS_METERS:
+    is_within_radius, distance_meters = verify_location(latitude, longitude)
+    
+    if not is_within_radius:
         print(f"[mark_attendance_by_email] User {email_str} is too far ({distance_meters:.2f}m). Attendance denied.")
         return None
 
@@ -289,12 +309,7 @@ class EmployeeViewSet(viewsets.ModelViewSet):
         updated = False
 
         # MinIO client
-        client = boto3.client(
-            's3',
-            endpoint_url='http://194.238.19.109:9000',
-            aws_access_key_id='djangouser',
-            aws_secret_access_key='django_secret_key',
-        )
+        client = get_s3_client()
         bucket_name = 'hrms-media'
 
         # Handle profile_picture if provided
@@ -312,14 +327,25 @@ class EmployeeViewSet(viewsets.ModelViewSet):
         # Update other fields
         for field, value in request.data.items():
             if hasattr(employee, field) and field != 'profile_picture':
-                setattr(employee, field, value)
+                # Special handling for ForeignKey fields
+                if field == 'reports_to':
+                    if value:  # not null
+                        try:
+                            manager = Manager.objects.get(email=value)
+                            setattr(employee, field, manager)
+                        except Manager.DoesNotExist:
+                            return Response({"error": "Manager not found"}, status=400)
+                    else:
+                        setattr(employee, field, None)
+                else:
+                    setattr(employee, field, value)
                 updated = True
 
         if updated:
             employee.save()
 
         serializer = EmployeeSerializer(employee)
-        return Response(serializer.data, status=status.HTTP_200_OK)
+        return Response(serializer.data, status=200)
 
     def update(self, request, *args, **kwargs):
         return self.partial_update(request, *args, **kwargs)
@@ -333,12 +359,7 @@ class EmployeeViewSet(viewsets.ModelViewSet):
         employee = serializer.save()
 
         if profile_file:
-            client = boto3.client(
-                's3',
-                endpoint_url='http://194.238.19.109:9000',
-                aws_access_key_id='djangouser',
-                aws_secret_access_key='django_secret_key',
-            )
+            client = get_s3_client()
             bucket_name = 'hrms-media'
             ext = profile_file.name.split(".")[-1]
             key = f'images/{employee.email}/profile_picture.{ext}'
@@ -351,7 +372,13 @@ class EmployeeViewSet(viewsets.ModelViewSet):
 
         serializer = EmployeeSerializer(employee)
         return Response(serializer.data, status=status.HTTP_201_CREATED)
-    
+
+
+class DepartmentViewSet(viewsets.ModelViewSet):
+    queryset = Department.objects.all()
+    serializer_class = DepartmentSerializer
+    lookup_field = 'id'
+
 
 class HRViewSet(viewsets.ModelViewSet):
     queryset = HR.objects.all()
@@ -1184,12 +1211,7 @@ def create_document(request):
         # Use email prefix as folder name
         folder_name = email.split("@")[0].lower()
 
-        client = boto3.client(
-            's3',
-            endpoint_url='http://194.238.19.109:9000',
-            aws_access_key_id='djangouser',
-            aws_secret_access_key='django_secret_key',
-        )
+        client = get_s3_client()
         bucket_name = 'hrms-media'
         base_url = f"http://194.238.19.109:9000/{bucket_name}/"
         uploaded_files = {}
@@ -1233,12 +1255,7 @@ def update_document(request, email):
         # Folder name = email prefix
         folder_name = email.split("@")[0].lower()
 
-        client = boto3.client(
-            's3',
-            endpoint_url='http://194.238.19.109:9000',
-            aws_access_key_id='djangouser',
-            aws_secret_access_key='django_secret_key',
-        )
+        client = get_s3_client()
         bucket_name = 'hrms-media'
         base_url = f"http://194.238.19.109:9000/{bucket_name}/"
 
@@ -1388,10 +1405,6 @@ def delete_award(request, id):
 def attendance_page(request):
     return render(request, 'attendance.html')
 
-OFFICE_LAT = 13.068906816007116
-OFFICE_LON = 77.55541294505542
-LOCATION_RADIUS_METERS = 500
-IST = pytz.timezone("Asia/Kolkata")
 
 
 @api_view(['POST'])
@@ -1455,11 +1468,9 @@ def mark_attendance_view(request):
 
                 if match[0]:
                     # ✅ Location verification
-                    user_location = (latitude, longitude)
-                    office_location = (OFFICE_LAT, OFFICE_LON)
-                    distance_meters = geodesic(user_location, office_location).meters
+                    is_within_radius, distance_meters = verify_location(latitude, longitude, 500)  # 500m for face recognition
 
-                    if distance_meters > LOCATION_RADIUS_METERS:
+                    if not is_within_radius:
                         os.remove(tmp_path)
                         return JsonResponse({
                             "status": "fail",

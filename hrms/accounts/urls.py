@@ -1,7 +1,7 @@
 from django.urls import path
 from accounts.views import (
     LoginView, CreateSuperUserView, SignupView, approve_user, reject_user,
-    today_attendance, RegisterView, list_attendance,
+    today_attendance, RegisterView, list_attendance, DepartmentViewSet,
     UserViewSet, EmployeeViewSet, HRViewSet, ManagerViewSet, AdminViewSet, CEOViewSet,
     apply_leave, update_leave_status, leaves_today, list_leaves,
     create_payroll, update_payroll_status, get_payroll, list_payrolls,
@@ -21,6 +21,9 @@ urlpatterns = [
     path('login/', LoginView.as_view(), name='login'),
     path('approve/', approve_user),
     path('reject/', reject_user),
+
+    path('departments/', DepartmentViewSet.as_view({'get': 'list', 'post': 'create'})),
+    path('departments/<int:pk>/', DepartmentViewSet.as_view({'get': 'retrieve', 'patch': 'partial_update', 'delete': 'destroy'})),
 
     path('users/', UserViewSet.as_view({'get': 'list', 'post': 'create'}), name='employee-list'),
     path('users/<str:email>/', UserViewSet.as_view({'get': 'retrieve', 'patch': 'partial_update', 'delete': 'destroy'}), name='users-detail'),
