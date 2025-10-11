@@ -196,9 +196,9 @@ class Attendance(models.Model):
     date = models.DateField(default=timezone.localdate)
     check_in = models.TimeField(null=True, blank=True)
     check_out = models.TimeField(null=True, blank=True)
-    # latitude = models.FloatField(null=True, blank=True)
-    # longitude = models.FloatField(null=True, blank=True)
-    # location_verified = models.BooleanField(default=False)  # True if within 100m radius
+    latitude = models.FloatField(null=True, blank=True)
+    longitude = models.FloatField(null=True, blank=True)
+    location_verified = models.BooleanField(default=False)  # True if within 100m radius
 
     def save(self, *args, **kwargs):
         if self.email:

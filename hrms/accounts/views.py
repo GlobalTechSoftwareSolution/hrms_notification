@@ -1,5 +1,4 @@
-import os, json, pytz, face_recognition, tempfile
-import boto3
+import os, json, pytz, face_recognition, tempfile, requests, boto3
 
 from io import BytesIO
 from datetime import datetime
@@ -1389,10 +1388,9 @@ def delete_award(request, id):
 def attendance_page(request):
     return render(request, 'attendance.html')
 
-
 OFFICE_LAT = 13.068906816007116
 OFFICE_LON = 77.55541294505542
-LOCATION_RADIUS_METERS = 500  # 100m allowed radius
+LOCATION_RADIUS_METERS = 500
 IST = pytz.timezone("Asia/Kolkata")
 
 
@@ -1400,7 +1398,6 @@ IST = pytz.timezone("Asia/Kolkata")
 @permission_classes([AllowAny])
 def mark_attendance_view(request):
     try:
-        # 1️⃣ Get latitude and longitude from POST request
         latitude = request.POST.get("latitude")
         longitude = request.POST.get("longitude")
 
@@ -1413,12 +1410,11 @@ def mark_attendance_view(request):
         except ValueError:
             return JsonResponse({"status": "fail", "message": "Invalid latitude or longitude"}, status=400)
 
-        # 2️⃣ Get uploaded image
         uploaded_file = request.FILES.get('image')
         if not uploaded_file:
             return JsonResponse({"status": "fail", "message": "No image provided"}, status=400)
 
-        # Save temporary file
+        # Save the uploaded image temporarily
         with tempfile.NamedTemporaryFile(delete=False, suffix=".jpg") as tmp:
             for chunk in uploaded_file.chunks():
                 tmp.write(chunk)
@@ -1426,71 +1422,85 @@ def mark_attendance_view(request):
 
         uploaded_img = face_recognition.load_image_file(tmp_path)
         uploaded_encodings = face_recognition.face_encodings(uploaded_img)
-
         if not uploaded_encodings:
             os.remove(tmp_path)
             return JsonResponse({"status": "fail", "message": "No face detected"}, status=400)
 
         uploaded_encoding = uploaded_encodings[0]
 
-        # 3️⃣ Loop through employees and check face match
         employees = Employee.objects.all()
         for emp in employees:
-            if not emp.profile_picture or not os.path.exists(emp.profile_picture.path):
+            if not emp.profile_picture:
                 continue
 
-            emp_img = face_recognition.load_image_file(emp.profile_picture.path)
-            emp_encodings = face_recognition.face_encodings(emp_img)
-            if not emp_encodings:
-                continue
+            # 🔹 Download the profile picture from MinIO URL
+            try:
+                response = requests.get(emp.profile_picture, timeout=10)
+                if response.status_code != 200:
+                    continue
 
-            emp_encoding = emp_encodings[0]
-            match = face_recognition.compare_faces([emp_encoding], uploaded_encoding, tolerance=0.5)
+                with tempfile.NamedTemporaryFile(delete=False, suffix=".jpg") as emp_tmp:
+                    emp_tmp.write(response.content)
+                    emp_tmp_path = emp_tmp.name
 
-            if match[0]:
-                # ✅ Check if within 100m of office
-                user_location = (latitude, longitude)
-                office_location = (OFFICE_LAT, OFFICE_LON)
-                distance_meters = geodesic(user_location, office_location).meters
+                emp_img = face_recognition.load_image_file(emp_tmp_path)
+                emp_encodings = face_recognition.face_encodings(emp_img)
+                os.remove(emp_tmp_path)
 
-                if distance_meters > LOCATION_RADIUS_METERS:
-                    os.remove(tmp_path)
-                    return JsonResponse({
-                        "status": "fail",
-                        "message": f"User too far from office ({distance_meters:.2f} meters). Attendance denied."
-                    }, status=400)
+                if not emp_encodings:
+                    continue
 
-                # ✅ Mark attendance
-                now_ist = timezone.localtime(timezone.now(), IST)
-                today = now_ist.date()
-                now_time = now_ist.time()
+                emp_encoding = emp_encodings[0]
+                match = face_recognition.compare_faces([emp_encoding], uploaded_encoding, tolerance=0.5)
 
-                obj, created = Attendance.objects.get_or_create(
-                    email=emp.email,
-                    date=today,
-                    defaults={
-                        "check_in": now_time,
-                        "latitude": latitude,
-                        "longitude": longitude,
-                        "location_verified": True
-                    }
-                )
+                if match[0]:
+                    # ✅ Location verification
+                    user_location = (latitude, longitude)
+                    office_location = (OFFICE_LAT, OFFICE_LON)
+                    distance_meters = geodesic(user_location, office_location).meters
 
-                if created:
-                    msg = f"Check-in marked for {emp.fullname}"
-                else:
-                    if obj.check_out:
-                        msg = f"Attendance already marked for today ({emp.fullname})"
+                    if distance_meters > LOCATION_RADIUS_METERS:
+                        os.remove(tmp_path)
+                        return JsonResponse({
+                            "status": "fail",
+                            "message": f"User too far from office ({distance_meters:.2f} meters). Attendance denied."
+                        }, status=400)
+
+                    # ✅ Mark attendance
+                    now_ist = timezone.localtime(timezone.now(), IST)
+                    today = now_ist.date()
+                    now_time = now_ist.time()
+
+                    obj, created = Attendance.objects.get_or_create(
+                        email=emp.email,
+                        date=today,
+                        defaults={
+                            "check_in": now_time,
+                            "latitude": latitude,
+                            "longitude": longitude,
+                            "location_verified": True
+                        }
+                    )
+
+                    if created:
+                        msg = f"Check-in marked for {emp.fullname}"
                     else:
-                        obj.check_out = now_time
-                        obj.latitude = latitude
-                        obj.longitude = longitude
-                        obj.location_verified = True
-                        obj.save()
-                        msg = f"Check-out marked for {emp.fullname}"
+                        if obj.check_out:
+                            msg = f"Attendance already marked for today ({emp.fullname})"
+                        else:
+                            obj.check_out = now_time
+                            obj.latitude = latitude
+                            obj.longitude = longitude
+                            obj.location_verified = True
+                            obj.save()
+                            msg = f"Check-out marked for {emp.fullname}"
 
-                os.remove(tmp_path)
-                return JsonResponse({"status": "success", "message": msg})
+                    os.remove(tmp_path)
+                    return JsonResponse({"status": "success", "message": msg})
+
+            except Exception as err:
+                print(f"Error processing {emp.email}: {err}")
+                continue
 
         os.remove(tmp_path)
         return JsonResponse({"status": "fail", "message": "No match found"}, status=404)
