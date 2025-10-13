@@ -3,10 +3,11 @@ import os, json, pytz, face_recognition, tempfile, requests, boto3
 from io import BytesIO
 from datetime import datetime
 from geopy.distance import geodesic
+from xhtml2pdf import pisa
 
 from django.conf import settings
 from django.utils import timezone
-from django.http import JsonResponse
+from django.http import JsonResponse, HttpResponse
 from accounts.models import Document
 from django.shortcuts import get_object_or_404, render
 from django.views.decorators.csrf import csrf_exempt
@@ -16,7 +17,7 @@ from django.utils.dateparse import parse_date
 from django.contrib.auth.tokens import PasswordResetTokenGenerator
 from django.utils.encoding import force_bytes, force_str
 from django.utils.http import urlsafe_base64_encode, urlsafe_base64_decode
-from django.core.mail import send_mail
+from django.core.mail import send_mail, EmailMessage
 from django.contrib.sites.shortcuts import get_current_site
 from django.template.loader import render_to_string
 from django.db.models import Q
@@ -1691,3 +1692,49 @@ class PasswordResetConfirmView(APIView):
         user.save()
         return Response({'message': 'Password has been reset successfully'}, status=status.HTTP_200_OK)
 
+
+@api_view(['POST'])
+def send_appointment_letter(request):
+    # Get email from POST body
+    email = request.data.get('email')
+    if not email:
+        return Response({"error": "Email is required"}, status=status.HTTP_400_BAD_REQUEST)
+
+    employee = Employee.objects.filter(email=email).first()
+    if not employee:
+        return Response({"error": "Employee not found"}, status=status.HTTP_404_NOT_FOUND)
+
+    # Prepare context for HTML
+    context = {
+        'employee_name': employee.fullname,
+        'designation': employee.designation or 'Employee',
+        'joining_date': employee.date_joined,
+        'department': employee.department,
+        'reporting_manager': employee.reports_to.email if employee.reports_to else 'N/A',
+        'logo_url': 'https://www.globaltechsoftwaresolutions.com/_next/image?url=%2Flogo%2FGlobal.jpg&w=64&q=75',
+        'company_name': 'Global Tech Software Solutions',
+        'salary': request.data.get('salary', 'Confidential'),  # optional extra field
+    }
+
+    # Render HTML template
+    html = render_to_string('letters/appointment_letter.html', context)
+
+    # Generate PDF
+    pdf_file = BytesIO()
+    pisa_status = pisa.CreatePDF(html, dest=pdf_file, encoding='UTF-8')
+    if pisa_status.err:
+        return Response({"error": "Error generating PDF"}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+    pdf_file.seek(0)
+
+    # Send email
+    email_message = EmailMessage(
+        subject="Appointment Letter",
+        body=f"Dear {employee.fullname},\n\nPlease find attached your appointment letter.",
+        from_email=None,  # uses DEFAULT_FROM_EMAIL
+        to=[employee.email],
+    )
+    email_message.attach(f"Appointment_Letter_{employee.fullname}.pdf", pdf_file.read(), 'application/pdf')
+    email_message.send(fail_silently=False)
+
+    return Response({"message": f"Appointment letter sent to {employee.email}"}, status=status.HTTP_200_OK)
