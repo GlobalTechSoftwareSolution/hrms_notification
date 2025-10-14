@@ -409,6 +409,21 @@ class Notice(models.Model):
 
     def __str__(self):
         return self.title
-    
+
+
+# class Message(models.Model):
+#     id = models.AutoField(primary_key=True)
+#     email = models.ForeignKey(
+#         Employee,  # who created the message
+#         on_delete=models.CASCADE,
+#         to_field='email'
+#     )
+#     message = models.TextField()
+#     status = models.CharField(max_length=20, default='Unread')
+
+#     def __str__(self):
+#         return f"Message from {self.email.email}"
+
+
 # class my_user(models.Model):
 #     username = models.CharField(max_length=100)

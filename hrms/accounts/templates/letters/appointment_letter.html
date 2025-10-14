@@ -1,222 +1,232 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-    <meta charset="UTF-8">
-    <title>Appointment Letter</title>
-    <style>
-        body {
-            font-family: Arial, sans-serif;
-            margin: 0;
-            padding: 0;
-            color: #333;
-        }
-        .page {
-            width: 210mm;
-            min-height: 297mm;
-            padding: 25mm 30mm;
-            box-sizing: border-box;
-            page-break-after: always;
-            position: relative;
-        }
-        .logo-container {
-            text-align: center;
-            margin-bottom: 20px;
-        }
-        .logo {
-            max-width: 150px;
-        }
-        h1, h2, h3 {
-            text-align: center;
-            margin-bottom: 15px;
-            page-break-inside: avoid;
-        }
-        p {
-            text-align: justify;
-            line-height: 1.6;
-            margin-bottom: 10px;
-            page-break-inside: avoid;
-        }
-        ul {
-            margin-left: 20px;
-            page-break-inside: avoid;
-        }
-        table {
-            width: 100%;
-            border-collapse: collapse;
-            margin-bottom: 15px;
-            page-break-inside: auto;
-        }
-        tr {
-            page-break-inside: avoid;
-            page-break-after: auto;
-        }
-        th, td {
-            padding: 8px;
-            text-align: left;
-            border: 1px solid #555;
-        }
-        .section-title {
-            background-color: #f2f2f2;
-            padding: 5px 10px;
-            margin-top: 10px;
-            font-weight: bold;
-            page-break-inside: avoid;
-        }
-        .signature {
-            margin-top: 60px;
-            text-align: right;
-        }
-        .footer {
-            position: absolute;
-            bottom: 20mm;
-            width: 100%;
-            text-align: center;
-            font-size: 12px;
-            color: gray;
-        }
-        .page-break {
-            page-break-after: always;
-        }
-    </style>
+  <meta charset="UTF-8">
+  <title>Document</title>
+  <style>
+    @page { size: A4; margin: 20mm 25mm; }
+
+    body { font-family: Arial, sans-serif; color: #222; margin: 0; padding: 0; }
+
+    .page { page-break-after: always; }
+
+    /* Use table layout to keep header/content/footer at fixed places */
+    .page-table { width: 100%; border-collapse: collapse; table-layout: fixed; }
+    .page-table td { padding: 0; }
+
+    /* A4 usable height = 297mm - (20mm top + 20mm bottom) = 257mm
+       Header: 25mm, Content: 217mm, Footer: 15mm */
+    .header-cell { height: 25mm; border-bottom: 2px solid #0a3d62; }
+    .content-cell { height: 217mm; vertical-align: top; padding-top: 12mm; }
+    .footer-cell { height: 15mm; border-top: 2px solid #0a3d62; vertical-align: middle; }
+
+    .header-inner { text-align: center; }
+    .header-title { color: #0a3d62; font-size: 24px; font-weight: bold; margin: 0; }
+    .header-logo { height: 18mm; }
+    .header-logo img { height: 18mm; width: auto; display: inline-block; }
+
+    /* Header bar to keep logo on left and title centered */
+    .header-bar { width: 100%; border-collapse: collapse; table-layout: fixed; }
+    .header-bar td { vertical-align: middle; }
+    .header-bar .col-logo { width: 30mm; text-align: left; }
+    .header-bar .col-title { text-align: center; }
+    .header-bar .col-spacer { width: 30mm; }
+
+    h2, h3 { color: #0a3d62; margin: 15px 0 5px 0; font-size: 15px;}
+    h2 { text-align: center; text-transform: uppercase; }
+    p { font-size: 13.5px; line-height: 1.6; text-align: justify; margin: 6px 0; }
+
+    /* Page 1 intro block offset */
+    .intro-block { margin-top: 0; }
+    .dummy-block { height: 6mm; min-height: 6mm; display: block; font-size: 0; line-height: 0; }
+
+    .footer { text-align: center; font-size: 11px; color: #444; }
+    .footer a { color: #0a3d62; text-decoration: none; }
+    .footer a:hover { text-decoration: underline; }
+  </style>
 </head>
 <body>
 
-<!-- Page 1: Introduction -->
-<div class="page">
-    <div class="logo-container">
-        <img src="https://www.globaltechsoftwaresolutions.com/_next/image?url=%2Flogo%2FGlobal.jpg&w=64&q=75" class="logo">
-    </div>
-    <h1>Global Tech Software Solutions</h1>
-    <h2>Appointment Letter</h2>
-    <p>Date: <strong>{{ date }}</strong></p>
-    <p>To,</p>
-    <p><strong>{{ employee_name }}</strong></p>
-    <p>Dear <strong>{{ employee_name }}</strong>,</p>
-    <p>We are pleased to offer you the position of <strong>{{ designation }}</strong> at Global Tech Software Solutions. Your appointment is subject to the following terms and conditions.</p>
-
-    <h3 class="section-title">1. Joining Details</h3>
-    <table>
-        <tr>
-            <th>Joining Date</th>
-            <td>{{ joining_date }}</td>
-        </tr>
-        <tr>
-            <th>Department</th>
-            <td>{{ department }}</td>
-        </tr>
-        <tr>
-            <th>Reporting Manager</th>
-            <td>{{ reporting_manager }}</td>
-        </tr>
-        <tr>
-            <th>Work Location</th>
-            <td>{{ work_location }}</td>
-        </tr>
+  <!-- Page 1 -->
+  <div class="page">
+    <table class="page-table">
+      <tr><td class="header-cell">
+        <table class="header-bar">
+          <tr>
+            <td class="col-logo">
+              <div class="header-logo">
+                <img src="https://www.globaltechsoftwaresolutions.com/_next/image?url=%2Flogo%2FGlobal.jpg&w=64&q=75" alt="Global Tech Software Solutions">
+              </div>
+            </td>
+            <td class="col-title">
+              <div class="header-title">Global Tech Software Solutions</div>
+            </td>
+            <td class="col-spacer"></td>
+          </tr>
+        </table>
+      </td></tr>
+      <tr><td class="content-cell">
+        <div class="intro-block">
+          <div class="dummy-block"></div>
+          <h2 style="padding-top:20px;font-size:25px;">Appointment Letter</h2>
+          <p>Date: <strong>__DATE__</strong></p>
+          <p>To,</p>
+          <p><strong>__EMPLOYEE_NAME__</strong></p>
+          <p>Dear <strong>__EMPLOYEE_NAME__</strong>,</p>
+          <p>Welcome to <strong>Global Tech Software Solutions</strong>. Congratulations on your appointment as <strong>__DESIGNATION__</strong>.
+          We are pleased to offer you this position as per the terms outlined below.</p>
+          <h3>1. Appointment Details</h3>
+          <p>Your appointment is effective from the date of joining, unless otherwise specified by the Company.</p>
+          <p>You will be on probation for <strong>12 months</strong>. Confirmation is based on performance and other criteria.</p>
+          <p>The retirement age is <strong>60 years</strong>.</p>
+          <p>You may be transferred to any other Company location or function as needed.</p>
+          <p>Your role requires collaboration with cross-functional teams, timely delivery of assigned tasks, and adherence to the Company’s coding, documentation, and review standards. You are expected to maintain the highest standards of integrity, quality, and professionalism while interacting with colleagues, customers, and partners.</p>
+          <p>During probation, performance will be reviewed based on technical capability, problem solving, communication, collaboration, adherence to timelines, and compliance with Company policies including information security guidelines.</p>
+          <p><strong>Joining Date:</strong> <strong>__JOINING_DATE__</strong></p>
+          <p><strong>Reporting:</strong> You will report to <strong>__REPORTING_MANAGER__</strong> in the <strong>__DEPARTMENT__</strong> department.</p>
+        </div>
+      </td></tr>
+      <tr><td class="footer-cell">
+        <div class="footer">
+          Global Tech Software Solutions | Address: No 10, 4th Floor, Gaduniy Complex, Ramaiah Layout, Vidyaranyapura, Bangalore - 560097 |
+          Contact: +91 9844281875 |
+          <a href="https://www.globaltechsoftwaresolutions.com">www.globaltechsoftwaresolutions.com</a>
+        </div>
+      </td></tr>
     </table>
-</div>
+  </div>
 
-<!-- Page 2: Salary & Benefits -->
-<div class="page">
-    <div class="logo-container">
-        <img src="https://www.globaltechsoftwaresolutions.com/_next/image?url=%2Flogo%2FGlobal.jpg&w=64&q=75" class="logo">
-    </div>
-
-    <h3 class="section-title">2. Salary Details</h3>
-    <table>
-        <tr>
-            <th>Component</th>
-            <th>Amount (INR)</th>
-        </tr>
-        <tr>
-            <td>Basic Salary</td>
-            <td>{{ basic_salary }}</td>
-        </tr>
-        <tr>
-            <td>House Rent Allowance (HRA)</td>
-            <td>{{ hra }}</td>
-        </tr>
-        <tr>
-            <td>Conveyance</td>
-            <td>{{ conveyance }}</td>
-        </tr>
-        <tr>
-            <td>Medical Allowance</td>
-            <td>{{ medical_allowance }}</td>
-        </tr>
-        <tr>
-            <td>Other Allowances</td>
-            <td>{{ other_allowances }}</td>
-        </tr>
-        <tr>
-            <th>Total CTC</th>
-            <th>{{ total_ctc }}</th>
-        </tr>
+  <!-- Page 2 -->
+  <div class="page">
+    <table class="page-table">
+      <tr><td class="header-cell">
+        <table class="header-bar">
+          <tr>
+            <td class="col-logo">
+              <div class="header-logo">
+                <img src="https://www.globaltechsoftwaresolutions.com/_next/image?url=%2Flogo%2FGlobal.jpg&w=64&q=75" alt="Global Tech Software Solutions">
+              </div>
+            </td>
+            <td class="col-title">
+              <div class="header-title">Global Tech Software Solutions</div>
+            </td>
+            <td class="col-spacer"></td>
+          </tr>
+        </table>
+      </td></tr>
+      <tr><td class="content-cell">
+        <h3 style="padding-top:20px;">2. Pre-Conditions</h3>
+        <p>This offer is subject to successful completion of your degree and the educational requirements outlined during recruitment.</p>
+        <p>Please submit a signed copy of this letter upon joining.</p>
+         <p>You must also submit copies of your identity proof, address proof, educational certificates, prior employment relieving letters (if applicable), and any other documents requested by HR for background verification. Any falsification of information will result in immediate withdrawal of this offer or termination.</p>
+        <h3>3. Compensation</h3>
+        <p>You will receive salary and benefits as per the salary offer sheet shared with you. Pay programs/benefits may change at the Company’s discretion.</p>
+        <p>Your salary will be periodically reviewed according to Company policy and individual performance.</p>
+         <p>In addition to fixed compensation, you may be eligible for performance incentives and project bonuses subject to Company policy and managerial approvals. Tax deductions will be made in accordance with applicable laws.</p>
+        <h3>4. Other Benefits</h3>
+        <p>Leave, holidays, perquisites, and working hours are governed by Company policy applicable to your stream and location.</p>
+        <p>You are entitled to provident fund, leave travel assistance, medical assistance (if not covered by ESI Act), and other benefits.</p>
+        <p>You are entitled to <strong>15</strong> days of annual holidays and applicable statutory holidays as per policy.</p>
+        <p>Your working hours are <strong>Monday to Saturday, 10:00 AM to 6:00 PM</strong>.</p>
+         <p>Employees are expected to be punctual and maintain accurate attendance records. Any planned leave should be pre-approved by your reporting manager. Unplanned absence should be intimated at the earliest opportunity with valid reasons.</p>
+      </td></tr>
+      <tr><td class="footer-cell">
+        <div class="footer">
+          Global Tech Software Solutions | Address: No 10, 4th Floor, Gaduniy Complex, Ramaiah Layout, Vidyaranyapura, Bangalore - 560097 |
+          Contact: +91 9844281875 |
+          <a href="https://www.globaltechsoftwaresolutions.com">www.globaltechsoftwaresolutions.com</a>
+        </div>
+      </td></tr>
     </table>
+  </div>
 
-    <h3 class="section-title">3. Benefits</h3>
-    <ul>
-        <li>Annual Leave: {{ annual_leave }} days per year</li>
-        <li>Medical Insurance: Covered under company policy</li>
-        <li>Provident Fund: As per statutory requirements</li>
-        <li>Gratuity: As per company policy</li>
-    </ul>
-
-    <h3 class="section-title">4. Probation</h3>
-    <p>You will be on probation for <strong>{{ probation_period }}</strong>. Confirmation will be based on performance evaluation.</p>
-</div>
-
-<!-- Page 3: Policies & Terms -->
-<div class="page">
-    <div class="logo-container">
-        <img src="https://www.globaltechsoftwaresolutions.com/_next/image?url=%2Flogo%2FGlobal.jpg&w=64&q=75" class="logo">
-    </div>
-
-    <h3 class="section-title">5. Confidentiality & Conduct</h3>
-    <p>You must maintain strict confidentiality about all company information, clients, and internal processes. Any breach may lead to disciplinary action.</p>
-
-    <h3 class="section-title">6. Termination</h3>
-    <p>Employment may be terminated by either party by providing a written notice of 30 days. Immediate termination can occur in cases of gross misconduct.</p>
-
-    <h3 class="section-title">7. Company Policies</h3>
-    <p>You are required to follow all company rules, regulations, and standard operating procedures.</p>
-
-    <h3 class="section-title">8. Leave & Holidays</h3>
-    <p>Annual leave entitlement is {{ annual_leave }} days. In addition, all statutory public holidays will be observed.</p>
-</div>
-
-<!-- Page 4: Acceptance & Signature -->
-<div class="page">
-    <div class="logo-container">
-        <img src="https://www.globaltechsoftwaresolutions.com/_next/image?url=%2Flogo%2FGlobal.jpg&w=64&q=75" class="logo">
-    </div>
-
-    <h3 class="section-title">9. Acceptance</h3>
-    <p>Please sign and return a copy of this letter to confirm your acceptance of the appointment.</p>
-
-    <table style="margin-top:50px;">
-        <tr>
-            <td>Employee Name:</td>
-            <td>{{ employee_name }}</td>
-        </tr>
-        <tr>
-            <td>Signature:</td>
-            <td>_________________________</td>
-        </tr>
-        <tr>
-            <td>Date:</td>
-            <td>_________________________</td>
-        </tr>
+  <!-- Page 3 -->
+  <div class="page">
+    <table class="page-table">
+      <tr><td class="header-cell">
+        <table class="header-bar">
+          <tr>
+            <td class="col-logo">
+              <div class="header-logo">
+                <img src="https://www.globaltechsoftwaresolutions.com/_next/image?url=%2Flogo%2FGlobal.jpg&w=64&q=75" alt="Global Tech Software Solutions">
+              </div>
+            </td>
+            <td class="col-title">
+              <div class="header-title">Global Tech Software Solutions</div>
+            </td>
+            <td class="col-spacer"></td>
+          </tr>
+        </table>
+      </td></tr>
+      <tr><td class="content-cell">
+         <h3 style="padding-top:20px;">5. Responsibilities</h3>
+        <p>You are expected to perform your duties diligently and responsibly. You may need to work extra hours when required.</p>
+        <p>All Company policies, including Business Conduct and Ethics, are binding throughout your tenure.</p>
+        <p>Violations or possible breaches of policy must be reported immediately to your Business Unit Head.</p>
+         <p>You must safeguard Company assets, intellectual property, and confidential information, and use Company resources solely for legitimate business purposes. Conflicts of interest should be disclosed promptly to management.</p>
+        <h3>6. Conflict of Interest</h3>
+        <p>Engage exclusively in work assigned by <strong>__COMPANY_NAME__</strong>. Separate full or part-time assignments require prior written consent.</p>
+        <p>You must not participate in, or facilitate, activities that conflict with the interests of the Company.</p>
+        <h3>7. Confidentiality</h3>
+        <p>All confidential information obtained during your employment must remain secret throughout and beyond cessation of employment.</p>
+        <p>You affirm that you have no obligations to previous employers that restrict your work with the Company.</p>
+         <p>Confidential information includes, but is not limited to, source code, designs, pricing, customer data, strategies, internal tools, and any non-public information. Sharing or misusing such information, intentionally or otherwise, may lead to disciplinary action including termination and legal recourse.</p>
+      </td></tr>
+      <tr><td class="footer-cell">
+        <div class="footer">
+          Global Tech Software Solutions | Address: No 10, 4th Floor, Gaduniy Complex, Ramaiah Layout, Vidyaranyapura, Bangalore - 560097 |
+          Contact: +91 9844281875 |
+          <a href="https://www.globaltechsoftwaresolutions.com">www.globaltechsoftwaresolutions.com</a>
+        </div>
+      </td></tr>
     </table>
+  </div>
 
-    <div class="signature">
+  <!-- Page 4 -->
+  <div class="page">
+    <table class="page-table">
+      <tr><td class="header-cell">
+        <table class="header-bar">
+          <tr>
+            <td class="col-logo">
+              <div class="header-logo">
+                <img src="https://www.globaltechsoftwaresolutions.com/_next/image?url=%2Flogo%2FGlobal.jpg&w=64&q=75" alt="Global Tech Software Solutions">
+              </div>
+            </td>
+            <td class="col-title">
+              <div class="header-title">Global Tech Software Solutions</div>
+            </td>
+            <td class="col-spacer"></td>
+          </tr>
+        </table>
+      </td></tr>
+      <tr><td class="content-cell">
+         <h3 style="padding-top:20px;">8. Assignment of Intellectual Property</h3>
+        <p>Any work, ideas, inventions, or improvements conceived during your employment are the exclusive property of the Company.</p>
+        <h3>9. Termination</h3>
+        <p>Employment may be terminated by either party without cause with one month’s notice during probation, and three months’ notice after confirmation.</p>
+        <p>All Company property and formalities must be completed prior to the last working day.</p>
+         <p>Upon separation, you must return all Company devices, ID cards, documents, credentials, and any other assets. Your obligations related to confidentiality and IP assignment survive termination.</p>
+        <h3>Declaration</h3>
+        <p>I have read, understood and agree to the Company’s terms and conditions of employment. I will report for duty and submit required documents on the joining date.</p>
+        <h3>Acceptance</h3>
+        <p>Kindly sign and return a copy of this letter as an acceptance of the above terms and conditions.</p>
+         <p>If you have any questions regarding this offer or the terms herein, please contact HR at <strong>hr@globaltechsoftwaresolutions.com</strong>. We look forward to your valuable contributions and a long, mutually rewarding professional relationship.</p>
+        <p style="margin-top:12px;">Accepted and Agreed by: <strong>__EMPLOYEE_NAME__</strong></p>
+        <p>Signature: _____________________ &nbsp;&nbsp;&nbsp; Date: ________________</p>
         <p>Authorized Signatory</p>
-        <p>Global Tech Software Solutions</p>
-    </div>
-
-    <div class="footer">
-        Global Tech Software Solutions | Address: #123, IT Park, Bangalore | Contact: +91-98765-43210 | www.globaltechsoftwaresolutions.com
-    </div>
-</div>
+        <p><strong>Global Tech Software Solutions</strong></p>
+      </td></tr>
+      <tr><td class="footer-cell">
+        <div class="footer">
+          Global Tech Software Solutions | Address: No 10, 4th Floor, Gaduniy Complex, Ramaiah Layout, Vidyaranyapura, Bangalore - 560097 |
+          Contact: +91 9844281875 |
+          <a href="https://www.globaltechsoftwaresolutions.com">www.globaltechsoftwaresolutions.com</a>
+        </div>
+      </td></tr>
+    </table>
+  </div>
 
 </body>
 </html>
+

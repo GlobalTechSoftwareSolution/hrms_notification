@@ -1,0 +1,96 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Offer Letter</title>
+  <style>
+    @page { size: A4; margin: 20mm 25mm; }
+
+    body { font-family: Arial, sans-serif; color: #222; margin: 0; padding: 0; }
+
+    /* Use table layout to keep header/content/footer at fixed places */
+    .page-table { width: 100%; border-collapse: collapse; table-layout: fixed; }
+    .page-table td { padding: 0; }
+
+    /* A4 usable height = 297mm - (20mm top + 20mm bottom) = 257mm
+       Header: 25mm, Content: 217mm, Footer: 15mm */
+    .header-cell { height: 25mm; border-bottom: 2px solid #0a3d62; }
+    .content-cell { height: 217mm; vertical-align: top; padding-top: 12mm; }
+    .footer-cell { height: 15mm; border-top: 2px solid #0a3d62; vertical-align: middle; }
+
+    .header-title { color: #0a3d62; font-size: 24px; font-weight: bold; margin: 0; text-align: center; }
+    .header-logo { height: 18mm; }
+    .header-logo img { height: 18mm; width: auto; display: inline-block; }
+
+    /* Header bar to keep logo on left and title centered */
+    .header-bar { width: 100%; border-collapse: collapse; table-layout: fixed; }
+    .header-bar td { vertical-align: middle; }
+    .header-bar .col-logo { width: 30mm; text-align: left; }
+    .header-bar .col-title { text-align: center; }
+    .header-bar .col-spacer { width: 30mm; }
+
+    h2, h3 { color: #0a3d62; margin: 15px 0 5px 0; font-size: 15px; }
+    h2 { text-align: center; text-transform: uppercase; }
+    p { font-size: 13.5px; line-height: 1.6; text-align: justify; margin: 6px 0; }
+
+    .footer { text-align: center; font-size: 11px; color: #444; }
+    .footer a { color: #0a3d62; text-decoration: none; }
+    .footer a:hover { text-decoration: underline; }
+  </style>
+</head>
+<body>
+
+  <table class="page-table">
+    <tr><td class="header-cell">
+      <table class="header-bar">
+        <tr>
+          <td class="col-logo">
+            <div class="header-logo">
+              <img src="https://www.globaltechsoftwaresolutions.com/_next/image?url=%2Flogo%2FGlobal.jpg&w=64&q=75" alt="Global Tech Software Solutions">
+            </div>
+          </td>
+          <td class="col-title">
+            <div class="header-title">Global Tech Software Solutions</div>
+          </td>
+          <td class="col-spacer"></td>
+        </tr>
+      </table>
+    </td></tr>
+
+    <tr><td class="content-cell">
+      <h2 style="padding-top:20px;font-size:25px;">Offer Letter</h2>
+      <p>Date: <strong>__DATE__</strong></p>
+      <p>To,</p>
+      <p><strong>__CANDIDATE_NAME__</strong></p>
+      <p>Dear <strong>__CANDIDATE_NAME__</strong>,</p>
+      <p>We are pleased to extend to you an offer of employment with <strong>Global Tech Software Solutions</strong> for the position of <strong>__DESIGNATION__</strong>, based at <strong>__LOCATION__</strong>. Your expected date of joining is <strong>__JOINING_DATE__</strong>, subject to completion of all joining formalities.</p>
+
+      <h3>Compensation and Benefits</h3>
+      <p>Your compensation and benefits shall be as per the enclosed/attached compensation structure and applicable Company policies. Statutory deductions shall be made as per prevailing laws.</p>
+
+      <h3>Terms of Employment</h3>
+      <p>You will be on probation for a period of <strong>__PROBATION_MONTHS__</strong> months from your date of joining. During probation, either party may terminate employment by giving prior written notice as per Company policy.</p>
+
+      <h3>Documents Required</h3>
+      <p>Please bring the following on your joining day: government-issued ID, address proof, educational certificates, relieving letter(s) from prior employer(s) if applicable, and any other documents requested by HR.</p>
+
+      <h3>Acceptance</h3>
+      <p>Please sign and return a copy of this offer letter as a token of your acceptance on or before <strong>__ACCEPTANCE_DEADLINE__</strong>. If you have any questions, contact us at <strong>hr@globaltechsoftwaresolutions.com</strong>.</p>
+
+      <p style="margin-top:14px;">Accepted and Agreed by: <strong>__CANDIDATE_NAME__</strong></p>
+      <p>Signature: _____________________ &nbsp;&nbsp;&nbsp; Date: ________________</p>
+    </td></tr>
+
+    <tr><td class="footer-cell">
+      <div class="footer">
+        Global Tech Software Solutions | Address: No 10, 4th Floor, Gaduniy Complex, Ramaiah Layout, Vidyaranyapura, Bangalore - 560097 |
+        Contact: +91 9844281875 |
+        <a href="https://www.globaltechsoftwaresolutions.com">www.globaltechsoftwaresolutions.com</a>
+      </div>
+    </td></tr>
+  </table>
+
+</body>
+</html>
+
+

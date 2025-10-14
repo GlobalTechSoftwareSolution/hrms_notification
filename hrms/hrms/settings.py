@@ -211,13 +211,11 @@ EMAIL_HOST_PASSWORD = 'bxuw agmx ggiq nswv'  # use App Password, not your real p
 DEFAULT_FROM_EMAIL = EMAIL_HOST_USER
 
 # --- MinIO (S3 Compatible) Storage Configuration ---
-DEFAULT_FILE_STORAGE = 'storages.backends.s3boto3.S3Boto3Storage'
-AWS_ACCESS_KEY_ID = 'djangouser'
-AWS_SECRET_ACCESS_KEY = 'django_secret_key'
-AWS_STORAGE_BUCKET_NAME = 'hrms-media'
-AWS_S3_ENDPOINT_URL = 'http://194.238.19.109:9000'
-AWS_S3_REGION_NAME = 'us-east-1'
-AWS_S3_SIGNATURE_VERSION = 's3v4'
-AWS_S3_ADDRESSING_STYLE = "path"
+MINIO_STORAGE = {
+    "ENDPOINT": "globaltechsoftwaresolutions.cloud:9000",
+    "ACCESS_KEY": "admin",
+    "SECRET_KEY": "admin12345",
+    "BUCKET_NAME": "hrms-media",
+    "USE_SSL": True,
+}
 
-MEDIA_URL = 'http://194.238.19.109:9000/hrms-media/'

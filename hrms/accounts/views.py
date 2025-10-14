@@ -1,6 +1,7 @@
 import os, json, pytz, face_recognition, tempfile, requests, boto3
 
 from io import BytesIO
+from pathlib import Path
 from datetime import datetime
 from geopy.distance import geodesic
 from xhtml2pdf import pisa
@@ -58,7 +59,7 @@ def get_s3_client():
     """Get configured S3 client for MinIO"""
     return boto3.client(
         's3',
-        endpoint_url='http://194.238.19.109:9000',
+        endpoint_url='https://194.238.19.109:9000',
         aws_access_key_id='djangouser',
         aws_secret_access_key='django_secret_key',
     )
@@ -278,7 +279,7 @@ def handle_delete(request, ModelClass):
         # Delete associated image from MinIO if exists
         client = get_s3_client()
         bucket_name = "hrms-media"
-        base_url = f"http://194.238.19.109:9000/{bucket_name}/"
+        base_url = f"https://194.238.19.109:9000/{bucket_name}/"
 
         if hasattr(instance, "profile_picture") and instance.profile_picture:
             file_url = instance.profile_picture
@@ -320,11 +321,36 @@ class UserViewSet(viewsets.ModelViewSet):
         return UserSerializer
 
 
+BASE_BUCKET_URL = "https://194.238.19.109:9000/hrms-media/"
+
 class EmployeeViewSet(viewsets.ModelViewSet):
     queryset = Employee.objects.all()
     serializer_class = EmployeeSerializer
     lookup_field = 'email'
 
+    # ------------------- CREATE -------------------
+    def create(self, request, *args, **kwargs):
+        data = request.data.copy()
+        profile_file = request.FILES.get('profile_picture')
+
+        serializer = EmployeeSerializer(data=data)
+        serializer.is_valid(raise_exception=True)
+        employee = serializer.save()
+
+        if profile_file:
+            client = get_s3_client()
+            bucket_name = 'hrms-media'
+            key = f'images/{employee.email}/profile_picture{profile_file.name[profile_file.name.rfind("."):]}'
+
+            # Upload new profile picture
+            client.upload_fileobj(profile_file, bucket_name, key, ExtraArgs={"ACL": "public-read"})
+            employee.profile_picture = f"{BASE_BUCKET_URL}{key}"
+            employee.save()
+
+        serializer = EmployeeSerializer(employee)
+        return Response(serializer.data, status=status.HTTP_201_CREATED)
+
+    # ------------------- PARTIAL UPDATE / UPDATE -------------------
     def partial_update(self, request, *args, **kwargs):
         employee = self.get_object()
         updated = False
@@ -335,26 +361,25 @@ class EmployeeViewSet(viewsets.ModelViewSet):
         # Handle profile_picture replacement
         if 'profile_picture' in request.FILES:
             file_obj = request.FILES['profile_picture']
-            key = f'images/{employee.email}/profile_picture.{file_obj.name.split(".")[-1]}'
+            key = f'images/{employee.email}/profile_picture{file_obj.name[file_obj.name.rfind("."):]}'  # deterministic key
 
-            # Delete old profile picture if exists
-            if employee.profile_picture:
-                old_key = employee.profile_picture.split(f"http://194.238.19.109:9000/{bucket_name}/")[-1]
+            # Delete old file if it exists
+            if employee.profile_picture and employee.profile_picture != f"{BASE_BUCKET_URL}{key}":
+                old_key = employee.profile_picture.replace(BASE_BUCKET_URL, "")
                 try:
                     client.delete_object(Bucket=bucket_name, Key=old_key)
-                    print(f"Deleted old profile picture from MinIO: {old_key}")
+                    print(f"Deleted old profile picture: {old_key}")
                 except Exception as e:
                     print(f"Failed to delete old profile picture: {e}")
 
             # Upload new profile picture
-            client.upload_fileobj(file_obj, bucket_name, key)
-            employee.profile_picture = f"http://194.238.19.109:9000/{bucket_name}/{key}"
+            client.upload_fileobj(file_obj, bucket_name, key, ExtraArgs={"ACL": "public-read"})
+            employee.profile_picture = f"{BASE_BUCKET_URL}{key}"
             updated = True
 
         # Update other fields
         for field, value in request.data.items():
             if hasattr(employee, field) and field != 'profile_picture':
-                # Special handling for ForeignKey fields
                 if field == 'reports_to':
                     if value:
                         try:
@@ -377,51 +402,31 @@ class EmployeeViewSet(viewsets.ModelViewSet):
     def update(self, request, *args, **kwargs):
         return self.partial_update(request, *args, **kwargs)
 
-    def create(self, request, *args, **kwargs):
-        data = request.data.copy()
-        profile_file = request.FILES.get('profile_picture')
-
-        serializer = EmployeeSerializer(data=data)
-        serializer.is_valid(raise_exception=True)
-        employee = serializer.save()
-
-        if profile_file:
-            client = get_s3_client()
-            bucket_name = 'hrms-media'
-            ext = profile_file.name.split(".")[-1]
-            key = f'images/{employee.email}/profile_picture.{ext}'
-
-            # Upload to MinIO
-            client.upload_fileobj(profile_file, bucket_name, key)
-            employee.profile_picture = f"http://194.238.19.109:9000/{bucket_name}/{key}"
-            employee.save()
-
-        serializer = EmployeeSerializer(employee)
-        return Response(serializer.data, status=status.HTTP_201_CREATED)
-
+    # ------------------- DESTROY -------------------
     def destroy(self, request, *args, **kwargs):
         employee = self.get_object()
-        email_str = employee.email.email if employee.email else "Unknown"
 
         client = get_s3_client()
         bucket_name = 'hrms-media'
 
         # Delete profile picture from MinIO
         if employee.profile_picture:
-            old_key = employee.profile_picture.split(f"http://194.238.19.109:9000/{bucket_name}/")[-1]
+            old_key = employee.profile_picture.replace(BASE_BUCKET_URL, "")
             try:
                 client.delete_object(Bucket=bucket_name, Key=old_key)
-                print(f"Deleted profile picture from MinIO: {old_key}")
+                print(f"Deleted profile picture: {old_key}")
             except Exception as e:
                 print(f"Failed to delete profile picture: {e}")
 
-        # Delete Employee (post_delete signal will handle deleting the User)
-        employee.delete()
+            # Set DB field to null
+            employee.profile_picture = None
+            employee.save()
 
         return Response(
-            {"message": f"Employee {email_str} and profile picture deleted successfully"},
+            {"message": f"Profile picture for {employee.email.email} deleted and database updated."},
             status=200
         )
+
 
 
 class DepartmentViewSet(viewsets.ModelViewSet):
@@ -1252,47 +1257,78 @@ def get_tasks_by_assigned_by(request, assigned_by_email):
         return JsonResponse({"error": str(e)}, status=500)
     
 
+import boto3
+from django.views.decorators.csrf import csrf_exempt
+from django.http import JsonResponse
+from django.shortcuts import get_object_or_404
+from django.conf import settings
+from django.http.multipartparser import MultiPartParser, MultiPartParserError
+from .models import Document, User  # adjust import if needed
+
+# Helper function to get S3/MinIO client
+def get_s3_client():
+    minio_conf = getattr(settings, "MINIO_STORAGE", {
+        "ENDPOINT": "minio.globaltechsoftwaresolutions.cloud:9000",
+        "ACCESS_KEY": "admin",
+        "SECRET_KEY": "admin12345",
+        "BUCKET_NAME": "hrms-media",
+        "USE_SSL": True,
+    })
+    client = boto3.client(
+        "s3",
+        endpoint_url=f"https://{minio_conf['ENDPOINT']}",
+        aws_access_key_id=minio_conf["ACCESS_KEY"],
+        aws_secret_access_key=minio_conf["SECRET_KEY"],
+        verify=False  # ignore SSL hostname mismatch temporarily
+    )
+    return client
+
+# Document Fields
+DOCUMENT_FIELDS = [
+    "tenth", "twelth", "degree", "masters", "marks_card", "certificates",
+    "award", "resume", "id_proof", "appointment_letter", "offer_letter",
+    "releaving_letter", "resignation_letter", "achievement_crt", "bonafide_crt",
+]
+
+BASE_BUCKET_URL = "https://minio.globaltechsoftwaresolutions.cloud:9000/hrms-media/"
+
+# CREATE Document
 @csrf_exempt
 def create_document(request):
-    if request.method == "POST":
-        email = request.POST.get("email")
-        user = get_object_or_404(User, email=email)
+    if request.method != "POST":
+        return JsonResponse({"error": "Method not allowed"}, status=405)
 
-        # Use email prefix as folder name
-        folder_name = email.split("@")[0].lower()
+    email = request.POST.get("email")
+    if not email:
+        return JsonResponse({"error": "Email is required"}, status=400)
 
-        client = get_s3_client()
-        bucket_name = 'hrms-media'
-        base_url = f"http://194.238.19.109:9000/{bucket_name}/"
-        uploaded_files = {}
+    user = get_object_or_404(User, email=email)
+    folder_name = email.split("@")[0].lower()
+    client = get_s3_client()
+    bucket_name = "hrms-media"
+    uploaded_files = {}
 
-        document_fields = [
-            "tenth", "twelth", "degree", "masters", "marks_card", "certificates",
-            "award", "resume", "id_proof", "appointment_letter", "offer_letter",
-            "releaving_letter", "resignation_letter", "achievement_crt", "bonafide_crt"
-        ]
+    for field in DOCUMENT_FIELDS:
+        file_obj = request.FILES.get(field)
+        if file_obj:
+            ext = file_obj.name.split(".")[-1]
+            key = f"documents/{folder_name}/{field}.{ext}"
+            client.upload_fileobj(file_obj, bucket_name, key, ExtraArgs={"ACL": "public-read"})
+            uploaded_files[field] = f"{BASE_BUCKET_URL}{key}"
 
-        for field in document_fields:
-            file_obj = request.FILES.get(field)
-            if file_obj:
-                ext = file_obj.name.split('.')[-1]  # file extension
-                key = f"documents/{folder_name}/{field}.{ext}"  # fixed file name
-                client.upload_fileobj(file_obj, bucket_name, key)
-                uploaded_files[field] = f"{base_url}{key}"
+    document = Document.objects.create(
+        email=user,
+        **{field: uploaded_files.get(field) for field in DOCUMENT_FIELDS}
+    )
 
-        # Create new Document
-        document = Document.objects.create(
-            email=user,
-            **{field: uploaded_files.get(field) for field in document_fields}
-        )
-
-        return JsonResponse({
-            "message": "Document created successfully",
-            "id": document.id,
-            "urls": uploaded_files
-        })
+    return JsonResponse({
+        "message": "Document created successfully",
+        "id": document.id,
+        "urls": uploaded_files
+    })
 
 
+# UPDATE Document
 @csrf_exempt
 def update_document(request, email):
     if request.method != "PATCH":
@@ -1300,55 +1336,48 @@ def update_document(request, email):
 
     user = get_object_or_404(User, email=email)
 
-    # 🔹 Parse multipart form-data manually for PATCH
+    # Parse multipart form-data manually for PATCH
     try:
         parser = MultiPartParser(request.META, request, request.upload_handlers, request.encoding)
         data, files = parser.parse()
     except MultiPartParserError as e:
         return JsonResponse({"error": f"Failed to parse multipart data: {e}"}, status=400)
 
-    print("FILES RECEIVED:", files)
-    print("DATA RECEIVED:", data)
-
-    # 🔹 Ensure one document per user
+    # Get or create document record
     doc, _ = Document.objects.get_or_create(email=user)
     Document.objects.filter(email=user).exclude(id=doc.id).delete()
 
     folder_name = email.split("@")[0].lower()
     client = get_s3_client()
     bucket_name = "hrms-media"
-    base_url = f"http://194.238.19.109:9000/{bucket_name}/"
-
-    document_fields = [
-        "tenth", "twelth", "degree", "masters", "marks_card", "certificates",
-        "award", "resume", "id_proof", "appointment_letter", "offer_letter",
-        "releaving_letter", "resignation_letter", "achievement_crt", "bonafide_crt",
-    ]
-
     updated_files = {}
 
-    for field in document_fields:
+    for field in DOCUMENT_FIELDS:
         file_obj = files.get(field)
         if not file_obj:
             continue
 
-        ext = file_obj.name.split(".")[-1]
-        key = f"documents/{folder_name}/{field}.{ext}"
+        # ✅ Use fixed key name for this field to overwrite
+        key = f"documents/{folder_name}/{field}{file_obj.name[file_obj.name.rfind('.'):]}"  # preserve new extension
 
-        # Delete old file if exists
+        # Optionally delete old file if the extension changed
         old_file_url = getattr(doc, field)
-        if old_file_url and old_file_url.startswith(base_url):
-            old_key = old_file_url.replace(base_url, "")
+        if old_file_url and old_file_url != f"{BASE_BUCKET_URL}{key}":
+            old_key = old_file_url.replace(BASE_BUCKET_URL, "")
             try:
                 client.delete_object(Bucket=bucket_name, Key=old_key)
+                print(f"Deleted old file: {old_key}")
             except Exception as e:
                 print(f"Failed to delete old file {old_key}: {e}")
 
-        # Upload new file
-        client.upload_fileobj(file_obj, bucket_name, key)
-        new_url = f"{base_url}{key}"
-        setattr(doc, field, new_url)
-        updated_files[field] = new_url
+        # Upload new file (will replace if key exists)
+        try:
+            client.upload_fileobj(file_obj, bucket_name, key, ExtraArgs={"ACL": "public-read"})
+            new_url = f"{BASE_BUCKET_URL}{key}"
+            setattr(doc, field, new_url)
+            updated_files[field] = new_url
+        except Exception as e:
+            return JsonResponse({"error": f"Upload failed for {field}: {str(e)}"}, status=500)
 
     if updated_files:
         doc.save()
@@ -1357,6 +1386,8 @@ def update_document(request, email):
         return JsonResponse({"message": "No files uploaded"}, status=400)
 
 
+
+# DELETE Document
 @csrf_exempt
 def delete_document(request, email):
     if request.method != "DELETE":
@@ -1364,33 +1395,28 @@ def delete_document(request, email):
 
     user = get_object_or_404(User, email=email)
     documents = Document.objects.filter(email=user)
-
     if not documents.exists():
         return JsonResponse({"message": "No documents found for this user"}, status=404)
 
     client = get_s3_client()
     bucket_name = "hrms-media"
-    base_url = f"http://194.238.19.109:9000/{bucket_name}/"
-
     deleted_files = []
 
-    # Loop through all document records for this user (should normally be 1)
     for doc in documents:
-        for field in [
-            "tenth", "twelth", "degree", "masters", "marks_card", "certificates",
-            "award", "resume", "id_proof", "appointment_letter", "offer_letter",
-            "releaving_letter", "resignation_letter", "achievement_crt", "bonafide_crt",
-        ]:
-            file_url = getattr(doc, field)
-            if file_url and file_url.startswith(base_url):
-                key = file_url.replace(base_url, "")
-                try:
-                    client.delete_object(Bucket=bucket_name, Key=key)
-                    deleted_files.append(key)
-                except Exception as e:
-                    print(f"Failed to delete {key}: {e}")
+        folder_name = email.split("@")[0].lower()
+        prefix = f"documents/{folder_name}/"
 
-        doc.delete()  # Delete DB record
+        # Delete all objects under this folder
+        response = client.list_objects_v2(Bucket=bucket_name, Prefix=prefix)
+        if "Contents" in response:
+            for obj in response["Contents"]:
+                try:
+                    client.delete_object(Bucket=bucket_name, Key=obj["Key"])
+                    deleted_files.append(obj["Key"])
+                except Exception as e:
+                    print(f"Failed to delete {obj['Key']}: {e}")
+
+        doc.delete()
 
     return JsonResponse({
         "message": f"{len(deleted_files)} file(s) and document record(s) deleted successfully",
@@ -1398,6 +1424,7 @@ def delete_document(request, email):
     })
 
 
+# LIST All Documents
 @csrf_exempt
 def list_documents(request):
     documents = Document.objects.all()
@@ -1405,16 +1432,14 @@ def list_documents(request):
 
     for doc in documents:
         doc_data = {"id": doc.id, "email": doc.email.email}
-        for field in doc._meta.get_fields():
-            if field.name in ["id", "email", "uploaded_at"]:
-                continue
-            file_value = getattr(doc, field.name)
-            doc_data[field.name] = file_value if file_value else None
+        for field in DOCUMENT_FIELDS:
+            doc_data[field] = getattr(doc, field) if getattr(doc, field) else None
         data.append(doc_data)
 
     return JsonResponse(data, safe=False)
 
 
+# GET Document for a user
 @csrf_exempt
 def get_document(request, email):
     user = get_object_or_404(User, email=email)
@@ -1425,14 +1450,12 @@ def get_document(request, email):
     data = []
     for doc in documents:
         doc_data = {"email": user.email}
-        for field in doc._meta.get_fields():
-            if field.name in ["id", "email", "uploaded_at"]:
-                continue
-            file_value = getattr(doc, field.name)
-            doc_data[field.name] = file_value if file_value else None
+        for field in DOCUMENT_FIELDS:
+            doc_data[field] = getattr(doc, field) if getattr(doc, field) else None
         data.append(doc_data)
 
     return JsonResponse(data, safe=False)
+
 
 
 @csrf_exempt
@@ -1694,7 +1717,7 @@ class PasswordResetConfirmView(APIView):
 
 
 @api_view(['POST'])
-def send_appointment_letter(request):
+def appointment_letter(request):
     # Get email from POST body
     email = request.data.get('email')
     if not email:
@@ -1727,14 +1750,113 @@ def send_appointment_letter(request):
 
     pdf_file.seek(0)
 
-    # Send email
-    email_message = EmailMessage(
-        subject="Appointment Letter",
-        body=f"Dear {employee.fullname},\n\nPlease find attached your appointment letter.",
-        from_email=None,  # uses DEFAULT_FROM_EMAIL
-        to=[employee.email],
-    )
-    email_message.attach(f"Appointment_Letter_{employee.fullname}.pdf", pdf_file.read(), 'application/pdf')
-    email_message.send(fail_silently=False)
+    # Save to local downloads directory at project root
+    project_root = Path(__file__).resolve().parents[2]
+    downloads_dir = project_root / 'downloads'
+    downloads_dir.mkdir(parents=True, exist_ok=True)
+    filename = f"Appointment_Letter_{employee.fullname}.pdf".replace('/', '-').replace('\\', '-')
+    save_path = downloads_dir / filename
+    with open(save_path, 'wb') as f:
+        f.write(pdf_file.read())
 
-    return Response({"message": f"Appointment letter sent to {employee.email}"}, status=status.HTTP_200_OK)
+    return Response({"message": "Appointment letter generated", "file_path": str(save_path)}, status=status.HTTP_200_OK)
+
+
+@api_view(['POST'])
+def offer_letter(request):
+    # Get email from POST body
+    email = request.data.get('email')
+    if not email:
+        return Response({"error": "Email is required"}, status=status.HTTP_400_BAD_REQUEST)
+
+    employee = Employee.objects.filter(email=email).first()
+    if not employee:
+        return Response({"error": "Employee not found"}, status=status.HTTP_404_NOT_FOUND)
+
+    # Prepare context for HTML
+    context = {
+        'candidate_name': employee.fullname,
+        'designation': employee.designation or 'Employee',
+        'location': getattr(employee, 'location', None) or 'Bangalore',
+        'joining_date': request.data.get('joining_date') or employee.date_joined,
+        'probation_months': request.data.get('probation_months', '6'),
+        'acceptance_deadline': request.data.get('acceptance_deadline', ''),
+        'logo_url': 'https://www.globaltechsoftwaresolutions.com/_next/image?url=%2Flogo%2FGlobal.jpg&w=64&q=75',
+        'company_name': 'Global Tech Software Solutions',
+    }
+
+    # Render HTML template
+    html = render_to_string('letters/offer_letter.html', context)
+
+    # Generate PDF
+    pdf_file = BytesIO()
+    pisa_status = pisa.CreatePDF(html, dest=pdf_file, encoding='UTF-8')
+    if pisa_status.err:
+        return Response({"error": "Error generating PDF"}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+    pdf_file.seek(0)
+
+    # Save to local downloads directory at project root
+    project_root = Path(__file__).resolve().parents[2]
+    downloads_dir = project_root / 'downloads'
+    downloads_dir.mkdir(parents=True, exist_ok=True)
+    filename = f"Offer_Letter_{employee.fullname}.pdf".replace('/', '-').replace('\\', '-')
+    save_path = downloads_dir / filename
+    with open(save_path, 'wb') as f:
+        f.write(pdf_file.read())
+
+    return Response({"message": "Offer letter generated", "file_path": str(save_path)}, status=status.HTTP_200_OK)
+
+
+@api_view(['POST'])
+def releaving_letter(request):
+    # Get email from POST body
+    email = request.data.get('email')
+    if not email:
+        return Response({"error": "Email is required"}, status=status.HTTP_400_BAD_REQUEST)
+
+    employee = Employee.objects.filter(email=email).first()
+    if not employee:
+        return Response({"error": "Employee not found"}, status=status.HTTP_404_NOT_FOUND)
+
+    # Inputs for relieving details
+    date_of_joining = request.data.get('date_of_joining') or getattr(employee, 'date_joined', '')
+    last_working_day = request.data.get('last_working_day', '')
+    resignation_effective_date = request.data.get('resignation_effective_date', last_working_day)
+    issue_date = request.data.get('issue_date', '')
+
+    # Prepare context for HTML
+    context = {
+        'employee_name': employee.fullname,
+        'employee_id': getattr(employee, 'employee_id', '') or getattr(employee, 'id', ''),
+        'designation': employee.designation or 'Employee',
+        'department': employee.department or '',
+        'date_of_joining': date_of_joining,
+        'last_working_day': last_working_day,
+        'resignation_effective_date': resignation_effective_date,
+        'issue_date': issue_date,
+        'logo_url': 'https://www.globaltechsoftwaresolutions.com/_next/image?url=%2Flogo%2FGlobal.jpg&w=64&q=75',
+        'company_name': 'Global Tech Software Solutions',
+    }
+
+    # Render HTML template
+    html = render_to_string('letters/releaving_letter.html', context)
+
+    # Generate PDF
+    pdf_file = BytesIO()
+    pisa_status = pisa.CreatePDF(html, dest=pdf_file, encoding='UTF-8')
+    if pisa_status.err:
+        return Response({"error": "Error generating PDF"}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+    pdf_file.seek(0)
+
+    # Save to local downloads directory at project root
+    project_root = Path(__file__).resolve().parents[2]
+    downloads_dir = project_root / 'downloads'
+    downloads_dir.mkdir(parents=True, exist_ok=True)
+    filename = f"Relieving_Letter_{employee.fullname}.pdf".replace('/', '-').replace('\\', '-')
+    save_path = downloads_dir / filename
+    with open(save_path, 'wb') as f:
+        f.write(pdf_file.read())
+
+    return Response({"message": "Relieving letter generated", "file_path": str(save_path)}, status=status.HTTP_200_OK)

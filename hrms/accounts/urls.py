@@ -13,7 +13,7 @@ from accounts.views import (
     create_document, list_documents, get_document, update_document, delete_document,
     create_award, list_awards, get_award, update_award, delete_award,
     attendance_page, mark_attendance_view, RequestPasswordResetView, PasswordResetConfirmView,
-    send_appointment_letter
+    appointment_letter, offer_letter, releaving_letter
 )
 
 
@@ -99,5 +99,7 @@ urlpatterns = [
     path('password_reset/', RequestPasswordResetView.as_view(), name='password-reset'),
     path('password_reset_confirm/<uidb64>/<token>/', PasswordResetConfirmView.as_view(), name='password-reset-confirm'),
 
-    path('send/', send_appointment_letter, name='send_appointment_letter'),
+    path('appointment_letter/', appointment_letter, name='appointment_letter'),
+    path('offer_letter/', offer_letter, name='offer_letter'),
+    path('releaving_letter/', releaving_letter, name='releaving_letter'),
 ]
