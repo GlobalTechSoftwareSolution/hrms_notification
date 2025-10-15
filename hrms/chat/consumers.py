@@ -1,67 +1,68 @@
+# chat/consumers.py
 import json
 from channels.generic.websocket import AsyncWebsocketConsumer
 from channels.db import database_sync_to_async
-from .models import ChatRoom, Message
-from django.contrib.auth import get_user_model
-
-User = get_user_model()
+from accounts.models import Employee  # adjust import path if different
 
 class ChatConsumer(AsyncWebsocketConsumer):
     async def connect(self):
         self.room_name = self.scope['url_route']['kwargs']['room_name']
         self.room_group_name = f"chat_{self.room_name}"
 
-        # Join room group
+        # Join chat group
         await self.channel_layer.group_add(
             self.room_group_name,
             self.channel_name
         )
         await self.accept()
 
-        # Create room if it doesn't exist
-        await self.get_or_create_room(self.room_name)
-
     async def disconnect(self, close_code):
+        # Leave chat group
         await self.channel_layer.group_discard(
             self.room_group_name,
             self.channel_name
         )
 
     async def receive(self, text_data):
-        data = json.loads(text_data)
-        message = data.get('message', '')
-        username = data.get('username', 'Anonymous')
-        image_url = data.get('image', None)
+        """
+        Handle received message from WebSocket and broadcast to the room.
+        """
+        text_data_json = json.loads(text_data)
+        message = text_data_json.get("message")
+        email = text_data_json.get("email")  # Sender's email passed from frontend
 
-        user = await self.get_user(username)
-        room = await self.get_or_create_room(self.room_name)
+        # Get fullname from Employee table
+        fullname = await self.get_fullname_from_email(email)
 
-        # Save message to DB
-        msg = await self.create_message(user, room, message, image_url)
-
-        # Broadcast message
+        # Broadcast message to the group
         await self.channel_layer.group_send(
             self.room_group_name,
             {
-                'type': 'chat_message',
-                'message': msg.content,
-                'username': username,
-                'image': image_url,
-                'timestamp': msg.timestamp.strftime('%Y-%m-%d %H:%M:%S')
+                "type": "chat_message",
+                "message": message,
+                "fullname": fullname or email,  # fallback to email if not found
             }
         )
 
     async def chat_message(self, event):
-        await self.send(text_data=json.dumps(event))
+        """
+        Send message to WebSocket.
+        """
+        message = event["message"]
+        fullname = event["fullname"]
+
+        await self.send(text_data=json.dumps({
+            "message": message,
+            "fullname": fullname
+        }))
 
     @database_sync_to_async
-    def get_user(self, username):
-        return User.objects.filter(username=username).first()
-
-    @database_sync_to_async
-    def get_or_create_room(self, name):
-        return ChatRoom.objects.get_or_create(name=name)[0]
-
-    @database_sync_to_async
-    def create_message(self, user, room, message, image):
-        return Message.objects.create(user=user, room=room, content=message, image=image)
+    def get_fullname_from_email(self, email):
+        """
+        Fetch the employee's fullname from DB based on email.
+        """
+        try:
+            emp = Employee.objects.get(email__email=email)
+            return emp.fullname
+        except Employee.DoesNotExist:
+            return None
