@@ -1,0 +1,81 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Bonafide Certificate</title>
+  <style>
+    @page { size: A4; margin: 20mm 25mm; }
+
+    body { font-family: Arial, sans-serif; color: #222; margin: 0; padding: 0; }
+    .page { page-break-after: always; }
+    .page-table { width: 100%; border-collapse: collapse; table-layout: fixed; }
+    .page-table td { padding: 0; }
+
+    .header-cell { height: 25mm; border-bottom: 2px solid #0a3d62; }
+    .content-cell { height: 217mm; vertical-align: top; padding-top: 12mm; }
+    .footer-cell { height: 15mm; border-top: 2px solid #0a3d62; vertical-align: middle; }
+
+    .header-title { color: #0a3d62; font-size: 24px; font-weight: bold; margin: 0; text-align: center; }
+    .header-logo { height: 18mm; }
+    .header-logo img { height: 18mm; width: auto; display: inline-block; }
+
+    .header-bar { width: 100%; border-collapse: collapse; table-layout: fixed; }
+    .header-bar td { vertical-align: middle; }
+    .header-bar .col-logo { width: 30mm; text-align: left; }
+    .header-bar .col-title { text-align: center; }
+    .header-bar .col-spacer { width: 30mm; }
+
+    h2, h3 { color: #0a3d62; margin: 15px 0 5px 0; font-size: 15px;}
+    h2 { text-align: center; text-transform: uppercase; }
+    p { font-size: 13.5px; line-height: 1.6; text-align: justify; margin: 6px 0; }
+
+    .footer { text-align: center; font-size: 11px; color: #444; }
+    .footer a { color: #0a3d62; text-decoration: none; }
+    .footer a:hover { text-decoration: underline; }
+  </style>
+</head>
+<body>
+
+  <div class="page">
+    <table class="page-table">
+        <tr><td class="header-cell">
+            <table class="header-bar">
+              <tr>
+                <td class="col-logo">
+                  <div class="header-logo">
+                    <img src="{{ logo_url }}" alt="{{ company_name }}">
+                  </div>
+                </td>
+                <td class="col-title">
+                  <div class="header-title">{{ company_name }}</div>
+                </td>
+                <td class="col-spacer"></td>
+              </tr>
+            </table>
+          </td></tr>
+
+      <tr><td class="content-cell">
+        <h2 style="padding-top:20px;font-size:25px;">Bonafide Certificate</h2>
+        <p>Certificate Issue Date: <strong>{{ issue_date }}</strong></p>
+        <p>This is to certify that <strong>{{ candidate_name }}</strong>, holding email ID <strong>{{ email }}</strong>, has been employed with <strong>{{ company_name }}</strong> in the capacity of <strong>{{ designation }}</strong> in the <strong>{{ department }}</strong> department.</p>
+
+        <p>The tenure of employment is from <strong>{{ date_of_joining }}</strong> to <strong>{{ last_working_day }}</strong>. During this period, the employee has shown satisfactory conduct and performance.</p>
+
+        <p>This certificate is being issued upon request of the employee for whatever purpose it may serve.</p>
+
+        <p style="margin-top:30px;">Authorized Signatory</p>
+        <p><strong>{{ company_name }}</strong></p>
+      </td></tr>
+
+      <tr><td class="footer-cell">
+        <div class="footer">
+          {{ company_name }} | Address: No 10, 4th Floor, Gaduniy Complex, Ramaiah Layout, Vidyaranyapura, Bangalore - 560097 |
+          Contact: +91 9844281875 |
+          <a href="https://www.globaltechsoftwaresolutions.com">www.globaltechsoftwaresolutions.com</a>
+        </div>
+      </td></tr>
+    </table>
+  </div>
+
+</body>
+</html>

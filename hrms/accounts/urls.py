@@ -13,7 +13,7 @@ from accounts.views import (
     create_document, list_documents, get_document, update_document, delete_document,
     create_award, list_awards, get_award, update_award, delete_award,
     attendance_page, mark_attendance_view, RequestPasswordResetView, PasswordResetConfirmView,
-    appointment_letter, offer_letter, releaving_letter
+    appointment_letter, offer_letter, releaving_letter, bonafide_certificate
 )
 
 
@@ -102,4 +102,5 @@ urlpatterns = [
     path('appointment_letter/', appointment_letter, name='appointment_letter'),
     path('offer_letter/', offer_letter, name='offer_letter'),
     path('releaving_letter/', releaving_letter, name='releaving_letter'),
+    path('bonafide_certificate/', bonafide_certificate, name='bonafide_certificate'),
 ]

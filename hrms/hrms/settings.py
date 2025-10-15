@@ -136,18 +136,6 @@ DATABASES = {
     'default': dj_database_url.parse(config('DATABASE_URL'))
 }
 
-# DATABASES = {
-#     'default': {
-#         'ENGINE': 'django.db.backends.postgresql',
-#         'NAME': 'wzcmifzynkfemwhsuola',
-#         'USER': 'postgres',
-#         'PASSWORD': 'Bengaluru@2021',
-#         'HOST': '194.238.19.109',
-#         'PORT': '5432',
-#     }
-# }
-
-
 # Password validation
 # https://docs.djangoproject.com/en/5.2/ref/settings/#auth-password-validators
 
@@ -212,10 +200,11 @@ DEFAULT_FROM_EMAIL = EMAIL_HOST_USER
 
 # --- MinIO (S3 Compatible) Storage Configuration ---
 MINIO_STORAGE = {
-    "ENDPOINT": "globaltechsoftwaresolutions.cloud:9000",
+    "ENDPOINT": "minio.globaltechsoftwaresolutions.cloud:9000",
     "ACCESS_KEY": "admin",
     "SECRET_KEY": "admin12345",
     "BUCKET_NAME": "hrms-media",
-    "USE_SSL": True,
+    "USE_SSL": True,  # HTTPS is now working
 }
+BASE_BUCKET_URL = "https://minio.globaltechsoftwaresolutions.cloud:9000/hrms-media/"
 

@@ -2,7 +2,7 @@ import os, json, pytz, face_recognition, tempfile, requests, boto3
 
 from io import BytesIO
 from pathlib import Path
-from datetime import datetime
+from datetime import datetime, timedelta
 from geopy.distance import geodesic
 from xhtml2pdf import pisa
 
@@ -55,14 +55,17 @@ LOCATION_RADIUS_METERS = 100  # 100m allowed radius
 IST = pytz.timezone("Asia/Kolkata")
 
 # Utility functions
-def get_s3_client():
-    """Get configured S3 client for MinIO"""
-    return boto3.client(
-        's3',
-        endpoint_url='https://194.238.19.109:9000',
-        aws_access_key_id='djangouser',
-        aws_secret_access_key='django_secret_key',
-    )
+# def get_s3_client():
+#     minio_conf = getattr(settings, "MINIO_STORAGE")
+#     protocol = "https" if minio_conf.get("USE_SSL", False) else "http"
+#     client = boto3.client(
+#         "s3",
+#         endpoint_url=f"{protocol}://{minio_conf['ENDPOINT']}",
+#         aws_access_key_id=minio_conf["ACCESS_KEY"],
+#         aws_secret_access_key=minio_conf["SECRET_KEY"],
+#         verify=True
+#     )
+#     return client
 
 def verify_location(latitude, longitude, radius_meters=None):
     """Verify if user is within allowed radius of office"""
@@ -279,7 +282,7 @@ def handle_delete(request, ModelClass):
         # Delete associated image from MinIO if exists
         client = get_s3_client()
         bucket_name = "hrms-media"
-        base_url = f"https://194.238.19.109:9000/{bucket_name}/"
+        base_url = getattr(settings, "BASE_BUCKET_URL", f"https://minio.globaltechsoftwaresolutions.cloud/browser/hrms-media/")
 
         if hasattr(instance, "profile_picture") and instance.profile_picture:
             file_url = instance.profile_picture
@@ -321,8 +324,27 @@ class UserViewSet(viewsets.ModelViewSet):
         return UserSerializer
 
 
-BASE_BUCKET_URL = "https://194.238.19.109:9000/hrms-media/"
+# BASE_BUCKET_URL = getattr(settings, "BASE_BUCKET_URL", "https://minio.globaltechsoftwaresolutions.cloud/browser/hrms-media/")
 
+
+from rest_framework import viewsets, status
+from rest_framework.response import Response
+from django.conf import settings
+import boto3
+from .models import Employee
+from .serializers import EmployeeSerializer
+
+# ------------------- S3 Client -------------------
+def get_s3_client():
+    return boto3.client(
+        's3',
+        endpoint_url=f"https://{settings.MINIO_STORAGE['ENDPOINT']}",
+        aws_access_key_id=settings.MINIO_STORAGE['ACCESS_KEY'],
+        aws_secret_access_key=settings.MINIO_STORAGE['SECRET_KEY'],
+        use_ssl=settings.MINIO_STORAGE['USE_SSL']
+    )
+
+# ------------------- Employee ViewSet -------------------
 class EmployeeViewSet(viewsets.ModelViewSet):
     queryset = Employee.objects.all()
     serializer_class = EmployeeSerializer
@@ -339,16 +361,40 @@ class EmployeeViewSet(viewsets.ModelViewSet):
 
         if profile_file:
             client = get_s3_client()
-            bucket_name = 'hrms-media'
-            key = f'images/{employee.email}/profile_picture{profile_file.name[profile_file.name.rfind("."):]}'
+            bucket_name = settings.MINIO_STORAGE["BUCKET_NAME"]
 
-            # Upload new profile picture
-            client.upload_fileobj(profile_file, bucket_name, key, ExtraArgs={"ACL": "public-read"})
-            employee.profile_picture = f"{BASE_BUCKET_URL}{key}"
-            employee.save()
+            # Ensure unique key per employee
+            extension = profile_file.name.split('.')[-1]
+            key = f'images/{employee.email}/profile_picture.{extension}'
+
+            try:
+                client.upload_fileobj(
+                    profile_file,
+                    bucket_name,
+                    key,
+                    ExtraArgs={
+                        "ContentType": profile_file.content_type
+                    }
+                )
+
+                # Assign public URL
+                employee.profile_picture = f"{settings.BASE_BUCKET_URL}{key}"
+                employee.save()
+
+            except Exception as e:
+                return Response(
+                    {"error": f"File upload failed: {str(e)}"},
+                    status=status.HTTP_500_INTERNAL_SERVER_ERROR
+                )
 
         serializer = EmployeeSerializer(employee)
         return Response(serializer.data, status=status.HTTP_201_CREATED)
+
+    # ------------------- UPDATE -------------------
+    def update(self, request, *args, **kwargs):
+        # Optional: handle profile picture update similarly
+        return super().update(request, *args, **kwargs)
+
 
     # ------------------- PARTIAL UPDATE / UPDATE -------------------
     def partial_update(self, request, *args, **kwargs):
@@ -1268,31 +1314,31 @@ from .models import Document, User  # adjust import if needed
 # Helper function to get S3/MinIO client
 def get_s3_client():
     minio_conf = getattr(settings, "MINIO_STORAGE", {
-        "ENDPOINT": "minio.globaltechsoftwaresolutions.cloud:9000",
+        "ENDPOINT": "minio.globaltechsoftwaresolutions.cloud",
         "ACCESS_KEY": "admin",
         "SECRET_KEY": "admin12345",
         "BUCKET_NAME": "hrms-media",
         "USE_SSL": True,
     })
+    protocol = "https" if minio_conf.get("USE_SSL", False) else "http"
     client = boto3.client(
         "s3",
-        endpoint_url=f"https://{minio_conf['ENDPOINT']}",
+        endpoint_url=f"{protocol}://{minio_conf['ENDPOINT']}",
         aws_access_key_id=minio_conf["ACCESS_KEY"],
         aws_secret_access_key=minio_conf["SECRET_KEY"],
-        verify=False  # ignore SSL hostname mismatch temporarily
+        verify=True  # Use True for SSL verification
     )
     return client
 
-# Document Fields
 DOCUMENT_FIELDS = [
     "tenth", "twelth", "degree", "masters", "marks_card", "certificates",
     "award", "resume", "id_proof", "appointment_letter", "offer_letter",
     "releaving_letter", "resignation_letter", "achievement_crt", "bonafide_crt",
 ]
 
-BASE_BUCKET_URL = "https://minio.globaltechsoftwaresolutions.cloud:9000/hrms-media/"
+# Use BASE_BUCKET_URL from settings.py
+BASE_BUCKET_URL = getattr(settings, "BASE_BUCKET_URL", "https://minio.globaltechsoftwaresolutions.cloud/browser/hrms-media/")
 
-# CREATE Document
 @csrf_exempt
 def create_document(request):
     if request.method != "POST":
@@ -1305,7 +1351,7 @@ def create_document(request):
     user = get_object_or_404(User, email=email)
     folder_name = email.split("@")[0].lower()
     client = get_s3_client()
-    bucket_name = "hrms-media"
+    bucket_name = settings.MINIO_STORAGE["BUCKET_NAME"]
     uploaded_files = {}
 
     for field in DOCUMENT_FIELDS:
@@ -1326,7 +1372,6 @@ def create_document(request):
         "id": document.id,
         "urls": uploaded_files
     })
-
 
 # UPDATE Document
 @csrf_exempt
@@ -1716,6 +1761,7 @@ class PasswordResetConfirmView(APIView):
         return Response({'message': 'Password has been reset successfully'}, status=status.HTTP_200_OK)
 
 
+
 @api_view(['POST'])
 def appointment_letter(request):
     # Get email from POST body
@@ -1727,16 +1773,21 @@ def appointment_letter(request):
     if not employee:
         return Response({"error": "Employee not found"}, status=status.HTTP_404_NOT_FOUND)
 
+    today = timezone.localtime().date()
+    acceptance_deadline = today + timedelta(days=5)
+
     # Prepare context for HTML
     context = {
         'employee_name': employee.fullname,
         'designation': employee.designation or 'Employee',
-        'joining_date': employee.date_joined,
-        'department': employee.department,
+        'joining_date': employee.date_joined.strftime('%d-%m-%Y'),
+        'department': employee.department or 'N/A',
         'reporting_manager': employee.reports_to.email if employee.reports_to else 'N/A',
         'logo_url': 'https://www.globaltechsoftwaresolutions.com/_next/image?url=%2Flogo%2FGlobal.jpg&w=64&q=75',
         'company_name': 'Global Tech Software Solutions',
-        'salary': request.data.get('salary', 'Confidential'),  # optional extra field
+        'salary': request.data.get('salary', 'Confidential'),
+        'today_date': today.strftime('%d-%m-%Y'),
+        'acceptance_deadline': acceptance_deadline.strftime('%d-%m-%Y'),
     }
 
     # Render HTML template
@@ -1773,14 +1824,18 @@ def offer_letter(request):
     if not employee:
         return Response({"error": "Employee not found"}, status=status.HTTP_404_NOT_FOUND)
 
-    # Prepare context for HTML
+    today = timezone.now().date()
+    acceptance_deadline = today + timedelta(days=5)
+
+    # Prepare context for HTML template
     context = {
         'candidate_name': employee.fullname,
         'designation': employee.designation or 'Employee',
         'location': getattr(employee, 'location', None) or 'Bangalore',
-        'joining_date': request.data.get('joining_date') or employee.date_joined,
-        'probation_months': request.data.get('probation_months', '6'),
-        'acceptance_deadline': request.data.get('acceptance_deadline', ''),
+        'joining_date': employee.date_joined or today,
+        'today_date': today,
+        'probation_months': 6,
+        'acceptance_deadline': acceptance_deadline,
         'logo_url': 'https://www.globaltechsoftwaresolutions.com/_next/image?url=%2Flogo%2FGlobal.jpg&w=64&q=75',
         'company_name': 'Global Tech Software Solutions',
     }
@@ -1796,7 +1851,7 @@ def offer_letter(request):
 
     pdf_file.seek(0)
 
-    # Save to local downloads directory at project root
+    # Save PDF to local downloads directory
     project_root = Path(__file__).resolve().parents[2]
     downloads_dir = project_root / 'downloads'
     downloads_dir.mkdir(parents=True, exist_ok=True)
@@ -1805,11 +1860,64 @@ def offer_letter(request):
     with open(save_path, 'wb') as f:
         f.write(pdf_file.read())
 
-    return Response({"message": "Offer letter generated", "file_path": str(save_path)}, status=status.HTTP_200_OK)
+    return Response({
+        "message": "Offer letter generated",
+        "file_path": str(save_path),
+        "offer_date": str(today),
+        "acceptance_deadline": str(acceptance_deadline)
+    }, status=status.HTTP_200_OK)
 
 
 @api_view(['POST'])
 def releaving_letter(request):
+    # Get email from POST body
+    email = request.data.get('email')
+    if not email:
+        return Response({"error": "Email is required"}, status=status.HTTP_400_BAD_REQUEST)
+
+    employee = Employee.objects.filter(email=email).first()
+    if not employee:
+        return Response({"error": "Employee not found"}, status=status.HTTP_404_NOT_FOUND)
+
+    today = timezone.now().date()
+    last_working_date = getattr(employee, 'last_working_date', today)
+
+    # Prepare context for template
+    context = {
+        'candidate_name': employee.fullname,
+        'designation': employee.designation or 'Employee',
+        'joining_date': employee.date_joined or today,
+        'last_working_date': last_working_date,
+        'company_name': 'Global Tech Software Solutions',
+        'logo_url': 'https://www.globaltechsoftwaresolutions.com/_next/image?url=%2Flogo%2FGlobal.jpg&w=64&q=75',
+        'today_date': today,
+    }
+
+    # Render HTML template
+    html = render_to_string('letters/releaving_letter.html', context)
+
+    # Generate PDF
+    pdf_file = BytesIO()
+    pisa_status = pisa.CreatePDF(html, dest=pdf_file, encoding='UTF-8')
+    if pisa_status.err:
+        return Response({"error": "Error generating PDF"}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+    pdf_file.seek(0)
+
+    # Save PDF to local downloads directory
+    project_root = Path(__file__).resolve().parents[2]
+    downloads_dir = project_root / 'downloads'
+    downloads_dir.mkdir(parents=True, exist_ok=True)
+    filename = f"Releaving_Letter_{employee.fullname}.pdf".replace('/', '-').replace('\\', '-')
+    save_path = downloads_dir / filename
+    with open(save_path, 'wb') as f:
+        f.write(pdf_file.read())
+
+    return Response({
+        "message": "Releaving letter generated",
+        "file_path": str(save_path),
+        "last_working_date": str(last_working_date)
+    }, status=status.HTTP_200_OK)
     # Get email from POST body
     email = request.data.get('email')
     if not email:
@@ -1860,3 +1968,60 @@ def releaving_letter(request):
         f.write(pdf_file.read())
 
     return Response({"message": "Relieving letter generated", "file_path": str(save_path)}, status=status.HTTP_200_OK)
+
+@api_view(['POST'])
+def bonafide_certificate(request):
+    email = request.data.get('email')
+    if not email:
+        return Response({"error": "Email is required"}, status=status.HTTP_400_BAD_REQUEST)
+
+    # Fetch employee from DB
+    employee = Employee.objects.filter(email=email).first()
+    if not employee:
+        return Response({"error": "Employee not found"}, status=status.HTTP_404_NOT_FOUND)
+
+    # Set dates
+    from datetime import datetime
+
+    # Automatically set last working day as today
+    last_working_day = datetime.today().strftime("%d-%m-%Y")
+
+    context = {
+        'candidate_name': employee.fullname,
+        'email': employee.email,
+        'designation': employee.designation or "Employee",
+        'department': employee.department or "N/A",
+        'date_of_joining': employee.date_joined.strftime("%d-%m-%Y") if employee.date_joined else "N/A",
+        'last_working_day': last_working_day,
+        'resignation_effective_date': last_working_day,
+        'issue_date': datetime.today().strftime("%d-%m-%Y"),
+        'company_name': 'Global Tech Software Solutions',
+        'logo_url': 'https://www.globaltechsoftwaresolutions.com/_next/image?url=%2Flogo%2FGlobal.jpg&w=64&q=75'
+    }
+
+
+
+    # Render HTML
+    html = render_to_string('letters/bonafide_certificate.html', context)
+
+    # Generate PDF
+    pdf_file = BytesIO()
+    pisa_status = pisa.CreatePDF(html, dest=pdf_file, encoding='UTF-8')
+    if pisa_status.err:
+        return Response({"error": "Error generating PDF"}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+    pdf_file.seek(0)
+
+    # Save PDF to downloads folder
+    project_root = Path(__file__).resolve().parents[2]
+    downloads_dir = project_root / 'downloads'
+    downloads_dir.mkdir(parents=True, exist_ok=True)
+    filename = f"Bonafide_Certificate_{employee.fullname}.pdf".replace('/', '-').replace('\\', '-')
+    save_path = downloads_dir / filename
+    with open(save_path, 'wb') as f:
+        f.write(pdf_file.read())
+
+    return Response({
+        "message": "Bonafide certificate generated",
+        "file_path": str(save_path)
+    }, status=status.HTTP_200_OK)
