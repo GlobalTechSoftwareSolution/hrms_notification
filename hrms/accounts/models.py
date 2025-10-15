@@ -409,20 +409,51 @@ class Notice(models.Model):
 
     def __str__(self):
         return self.title
+    
 
+class Ticket(models.Model):
+    id = models.AutoField(primary_key=True)
+    email = models.ForeignKey(
+        User,
+        on_delete=models.CASCADE,
+        to_field='email',
+        related_name='tickets'
+    )
+    subject = models.CharField(max_length=255)
+    description = models.TextField(null=True, blank=True)
+    status = models.CharField(
+        max_length=20,
+        choices=[
+            ('Open', 'Open'),
+            ('In Progress', 'In Progress'),
+            ('Resolved', 'Resolved'),
+            ('Closed', 'Closed'),
+        ],
+        default='Open'
+    )
+    priority = models.CharField(
+        max_length=20,
+        choices=[
+            ('Low', 'Low'),
+            ('Medium', 'Medium'),
+            ('High', 'High'),
+            ('Critical', 'Critical'),
+        ],
+        default='Medium'
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+    assigned_to = models.ForeignKey(
+        User,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='assigned_tickets'
+    )
 
-# class Message(models.Model):
-#     id = models.AutoField(primary_key=True)
-#     email = models.ForeignKey(
-#         Employee,  # who created the message
-#         on_delete=models.CASCADE,
-#         to_field='email'
-#     )
-#     message = models.TextField()
-#     status = models.CharField(max_length=20, default='Unread')
+    def __str__(self):
+        return f"Ticket #{self.id} - {self.subject} ({self.status})"
 
-#     def __str__(self):
-#         return f"Message from {self.email.email}"
 
 
 # class my_user(models.Model):

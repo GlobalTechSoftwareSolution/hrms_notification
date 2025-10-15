@@ -13,7 +13,7 @@ from accounts.views import (
     create_document, list_documents, get_document, update_document, delete_document,
     create_award, list_awards, get_award, update_award, delete_award,
     attendance_page, mark_attendance_view, RequestPasswordResetView, PasswordResetConfirmView,
-    appointment_letter, offer_letter, releaving_letter, bonafide_certificate
+    appointment_letter, offer_letter, releaving_letter, bonafide_certificate, TicketViewSet
 )
 
 
@@ -103,4 +103,8 @@ urlpatterns = [
     path('offer_letter/', offer_letter, name='offer_letter'),
     path('releaving_letter/', releaving_letter, name='releaving_letter'),
     path('bonafide_certificate/', bonafide_certificate, name='bonafide_certificate'),
+
+    path('tickets/', TicketViewSet.as_view({'get': 'list', 'post': 'create'}), name='ticket-list'),
+    path('tickets/<str:email>/', TicketViewSet.as_view({'get': 'retrieve', 'patch': 'partial_update', 'delete': 'destroy'}), name='ticket-detail'),
+
 ]

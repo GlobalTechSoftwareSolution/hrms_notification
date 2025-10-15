@@ -35,14 +35,14 @@ from rest_framework.decorators import api_view, permission_classes
 from .models import (
     User, CEO, HR, Manager, Department, Employee, Attendance, Admin,
     Leave, Payroll, TaskTable, Project, Notice, Report,
-    Document, Award
+    Document, Award, Ticket
 )
 
 # Serializers
 from .serializers import (
     UserSerializer, CEOSerializer, HRSerializer, ManagerSerializer, DepartmentSerializer,
     EmployeeSerializer, SuperUserCreateSerializer, UserRegistrationSerializer,
-    AdminSerializer, ReportSerializer, RegisterSerializer, DocumentSerializer, AwardSerializer
+    AdminSerializer, ReportSerializer, RegisterSerializer, DocumentSerializer, AwardSerializer, TicketSerializer
 )
 
 # Ensure User model points to custom one
@@ -1573,6 +1573,10 @@ def delete_award(request, id):
 def attendance_page(request):
     return render(request, 'attendance.html')
 
+
+class TicketViewSet(viewsets.ModelViewSet):
+    queryset = Ticket.objects.all().order_by('-created_at')
+    serializer_class = TicketSerializer
 
 
 @api_view(['POST'])
