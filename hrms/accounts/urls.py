@@ -105,6 +105,5 @@ urlpatterns = [
     path('bonafide_certificate/', bonafide_certificate, name='bonafide_certificate'),
 
     path('tickets/', TicketViewSet.as_view({'get': 'list', 'post': 'create'}), name='ticket-list'),
-    path('tickets/<str:email>/', TicketViewSet.as_view({'get': 'retrieve', 'patch': 'partial_update', 'delete': 'destroy'}), name='ticket-detail'),
-
+    path('tickets/<str:email>/', TicketViewSet.as_view({'get': 'list_by_email', 'patch': 'patch_status_by_email'}), name='ticket-by-email'),
 ]

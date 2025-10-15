@@ -40,7 +40,22 @@ INSTALLED_APPS = [
     'corsheaders',
     'accounts',
     'storages',
+    'channels',
+    'chat',
 ]
+
+ASGI_APPLICATION = 'hrms.asgi.application'
+
+
+# Redis channel layer
+CHANNEL_LAYERS = {
+    "default": {
+        "BACKEND": "channels_redis.core.RedisChannelLayer",
+        "CONFIG": {
+            "hosts": [("127.0.0.1", 6379)],  # Redis must run on localhost
+        },
+    },
+}
 
 # Set custom user model
 AUTH_USER_MODEL = 'accounts.User'

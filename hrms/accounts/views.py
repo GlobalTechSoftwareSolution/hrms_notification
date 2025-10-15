@@ -8,7 +8,7 @@ from xhtml2pdf import pisa
 
 from django.conf import settings
 from django.utils import timezone
-from django.http import JsonResponse, HttpResponse
+from django.http import Http404, JsonResponse, HttpResponse
 from accounts.models import Document
 from django.shortcuts import get_object_or_404, render
 from django.views.decorators.csrf import csrf_exempt
@@ -22,6 +22,7 @@ from django.core.mail import send_mail, EmailMessage
 from django.contrib.sites.shortcuts import get_current_site
 from django.template.loader import render_to_string
 from django.db.models import Q
+from django.db import models
 from django.shortcuts import get_object_or_404
 from django.http.multipartparser import MultiPartParser, MultiPartParserError
 
@@ -1573,10 +1574,43 @@ def delete_award(request, id):
 def attendance_page(request):
     return render(request, 'attendance.html')
 
-
 class TicketViewSet(viewsets.ModelViewSet):
-    queryset = Ticket.objects.all().order_by('-created_at')
+    queryset = Ticket.objects.all()
     serializer_class = TicketSerializer
+
+    # GET: view all tickets where email = owner OR assigned_to = this email
+    def list_by_email(self, request, email=None):
+        tickets = Ticket.objects.filter(
+            models.Q(email__email=email) | models.Q(assigned_to__email=email)
+        ).order_by('-created_at')
+
+        serializer = self.get_serializer(tickets, many=True)
+        return Response(serializer.data)
+
+    # PATCH: update status only if the assigned_to email matches
+    def patch_status_by_email(self, request, email=None):
+        ticket_id = request.data.get('id')
+        new_status = request.data.get('status')
+
+        if not ticket_id or not new_status:
+            return Response({"error": "Both 'id' and 'status' are required."}, status=status.HTTP_400_BAD_REQUEST)
+
+        # Find the ticket by id
+        ticket = get_object_or_404(Ticket, id=ticket_id)
+
+        # Check if the email is the assigned person
+        if not ticket.assigned_to or ticket.assigned_to.email != email:
+            return Response({"error": "Only the assigned person can update the status."}, status=status.HTTP_403_FORBIDDEN)
+
+        # Validate status
+        if new_status not in dict(Ticket._meta.get_field('status').choices):
+            return Response({"error": f"Invalid status: {new_status}"}, status=status.HTTP_400_BAD_REQUEST)
+
+        ticket.status = new_status
+        ticket.save()
+
+        serializer = self.get_serializer(ticket)
+        return Response(serializer.data)
 
 
 @api_view(['POST'])

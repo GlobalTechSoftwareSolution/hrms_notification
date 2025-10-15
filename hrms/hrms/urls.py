@@ -30,6 +30,7 @@ def home(request):
 urlpatterns = [
     path('', home, name='home'),  # Or use root_redirect
     path('admin/', admin.site.urls),
+    path('chat/', include('chat.urls')),
     path('api/accounts/', include('accounts.urls')),
     path("health/", health_check, name="health"),
 ] + static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)
