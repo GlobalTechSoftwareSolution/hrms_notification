@@ -1765,22 +1765,28 @@ class PasswordResetConfirmView(APIView):
         return Response({'message': 'Password has been reset successfully'}, status=status.HTTP_200_OK)
 
 
-
 @api_view(['POST'])
 def appointment_letter(request):
-    # Get email from POST body
     email = request.data.get('email')
     if not email:
         return Response({"error": "Email is required"}, status=status.HTTP_400_BAD_REQUEST)
 
+    # Fetch employee
     employee = Employee.objects.filter(email=email).first()
     if not employee:
         return Response({"error": "Employee not found"}, status=status.HTTP_404_NOT_FOUND)
 
+    # Fetch corresponding User
+    try:
+        user = User.objects.get(email=employee.email)
+    except User.DoesNotExist:
+        return Response({"error": "User not found for this employee"}, status=status.HTTP_404_NOT_FOUND)
+
     today = timezone.localtime().date()
     acceptance_deadline = today + timedelta(days=5)
+    folder_name = email.split('@')[0].lower()
 
-    # Prepare context for HTML
+    # -------------------- Render PDF -------------------- #
     context = {
         'employee_name': employee.fullname,
         'designation': employee.designation or 'Employee',
@@ -1789,49 +1795,98 @@ def appointment_letter(request):
         'reporting_manager': employee.reports_to.email if employee.reports_to else 'N/A',
         'logo_url': 'https://www.globaltechsoftwaresolutions.com/_next/image?url=%2Flogo%2FGlobal.jpg&w=64&q=75',
         'company_name': 'Global Tech Software Solutions',
-        'salary': request.data.get('salary', 'Confidential'),
+        'salary': 'Confidential',
         'today_date': today.strftime('%d-%m-%Y'),
         'acceptance_deadline': acceptance_deadline.strftime('%d-%m-%Y'),
     }
 
-    # Render HTML template
     html = render_to_string('letters/appointment_letter.html', context)
 
-    # Generate PDF
-    pdf_file = BytesIO()
-    pisa_status = pisa.CreatePDF(html, dest=pdf_file, encoding='UTF-8')
-    if pisa_status.err:
-        return Response({"error": "Error generating PDF"}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+    # PDF for MinIO
+    pdf_minio = BytesIO()
+    pisa_status_minio = pisa.CreatePDF(html, dest=pdf_minio, encoding='UTF-8')
+    if pisa_status_minio.err:
+        return Response({"error": "PDF generation failed"}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+    pdf_minio.seek(0)
 
-    pdf_file.seek(0)
+    # PDF for email (separate BytesIO)
+    pdf_email = BytesIO()
+    pisa_status_email = pisa.CreatePDF(html, dest=pdf_email, encoding='UTF-8')
+    if pisa_status_email.err:
+        return Response({"error": "PDF generation for email failed"}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+    pdf_email.seek(0)
 
-    # Save to local downloads directory at project root
-    project_root = Path(__file__).resolve().parents[2]
-    downloads_dir = project_root / 'downloads'
-    downloads_dir.mkdir(parents=True, exist_ok=True)
-    filename = f"Appointment_Letter_{employee.fullname}.pdf".replace('/', '-').replace('\\', '-')
-    save_path = downloads_dir / filename
-    with open(save_path, 'wb') as f:
-        f.write(pdf_file.read())
+    # -------------------- Upload to MinIO -------------------- #
+    filename = "appointment_letter.pdf"
+    object_name = f"documents/{folder_name}/{filename}"
 
-    return Response({"message": "Appointment letter generated", "file_path": str(save_path)}, status=status.HTTP_200_OK)
+    try:
+        s3 = boto3.client(
+            's3',
+            endpoint_url='https://minio.globaltechsoftwaresolutions.cloud:9000',
+            aws_access_key_id='admin',
+            aws_secret_access_key='admin12345'
+        )
+        bucket_name = 'hrms-media'
+
+        # Upload or overwrite existing file
+        s3.upload_fileobj(pdf_minio, bucket_name, object_name, ExtraArgs={'ContentType': 'application/pdf'})
+
+        file_url = f"https://minio.globaltechsoftwaresolutions.cloud:9000/{bucket_name}/{object_name}"
+
+        # -------------------- Save URL to DB -------------------- #
+        document, created = Document.objects.get_or_create(email=user)
+        document.appointment_letter = file_url
+        document.save()
+
+    except Exception as e:
+        return Response({"error": f"MinIO upload or DB save failed: {str(e)}"}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+    # -------------------- Send Email -------------------- #
+    try:
+        pdf_email.seek(0)
+        pdf_content = pdf_email.read()
+
+        mail = EmailMessage(
+            subject="Appointment Letter - Global Tech Software Solutions",
+            body=f"Dear {employee.fullname},\n\nPlease find attached your appointment letter.\n\nBest Regards,\nGlobal Tech HR",
+            to=[employee.email]
+        )
+        mail.attach(filename, pdf_content, 'application/pdf')
+        mail.send(fail_silently=False)
+
+    except Exception as e:
+        return Response({"error": f"Failed to send email: {str(e)}"}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+    return Response({
+        "message": "Appointment letter generated, uploaded to MinIO, saved in DB, and emailed successfully.",
+        "employee": employee.fullname,
+        "file_url": file_url
+    }, status=status.HTTP_200_OK)
 
 
 @api_view(['POST'])
 def offer_letter(request):
-    # Get email from POST body
     email = request.data.get('email')
     if not email:
         return Response({"error": "Email is required"}, status=status.HTTP_400_BAD_REQUEST)
 
+    # Fetch employee
     employee = Employee.objects.filter(email=email).first()
     if not employee:
         return Response({"error": "Employee not found"}, status=status.HTTP_404_NOT_FOUND)
 
+    # Fetch corresponding User
+    try:
+        user = User.objects.get(email=employee.email)
+    except User.DoesNotExist:
+        return Response({"error": "User not found for this employee"}, status=status.HTTP_404_NOT_FOUND)
+
     today = timezone.now().date()
     acceptance_deadline = today + timedelta(days=5)
+    folder_name = email.split('@')[0].lower()
 
-    # Prepare context for HTML template
+    # -------------------- Render PDF -------------------- #
     context = {
         'candidate_name': employee.fullname,
         'designation': employee.designation or 'Employee',
@@ -1844,134 +1899,166 @@ def offer_letter(request):
         'company_name': 'Global Tech Software Solutions',
     }
 
-    # Render HTML template
     html = render_to_string('letters/offer_letter.html', context)
 
-    # Generate PDF
-    pdf_file = BytesIO()
-    pisa_status = pisa.CreatePDF(html, dest=pdf_file, encoding='UTF-8')
-    if pisa_status.err:
-        return Response({"error": "Error generating PDF"}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+    # PDF for MinIO
+    pdf_minio = BytesIO()
+    pisa_status_minio = pisa.CreatePDF(html, dest=pdf_minio, encoding='UTF-8')
+    if pisa_status_minio.err:
+        return Response({"error": "PDF generation failed"}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+    pdf_minio.seek(0)
 
-    pdf_file.seek(0)
+    # PDF for email
+    pdf_email = BytesIO()
+    pisa_status_email = pisa.CreatePDF(html, dest=pdf_email, encoding='UTF-8')
+    if pisa_status_email.err:
+        return Response({"error": "PDF generation for email failed"}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+    pdf_email.seek(0)
 
-    # Save PDF to local downloads directory
-    project_root = Path(__file__).resolve().parents[2]
-    downloads_dir = project_root / 'downloads'
-    downloads_dir.mkdir(parents=True, exist_ok=True)
-    filename = f"Offer_Letter_{employee.fullname}.pdf".replace('/', '-').replace('\\', '-')
-    save_path = downloads_dir / filename
-    with open(save_path, 'wb') as f:
-        f.write(pdf_file.read())
+    # -------------------- Upload to MinIO -------------------- #
+    filename = "offer_letter.pdf"
+    object_name = f"documents/{folder_name}/{filename}"
+
+    try:
+        s3 = boto3.client(
+            's3',
+            endpoint_url='https://minio.globaltechsoftwaresolutions.cloud:9000',
+            aws_access_key_id='admin',
+            aws_secret_access_key='admin12345'
+        )
+        bucket_name = 'hrms-media'
+        s3.upload_fileobj(pdf_minio, bucket_name, object_name, ExtraArgs={'ContentType': 'application/pdf'})
+
+        file_url = f"https://minio.globaltechsoftwaresolutions.cloud:9000/{bucket_name}/{object_name}"
+
+        # Save URL to DB
+        document, created = Document.objects.get_or_create(email=user)
+        document.offer_letter = file_url
+        document.save()
+
+    except Exception as e:
+        return Response({"error": f"MinIO upload or DB save failed: {str(e)}"}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+    # -------------------- Send Email -------------------- #
+    try:
+        pdf_email.seek(0)
+        pdf_content = pdf_email.read()
+
+        mail = EmailMessage(
+            subject="Offer Letter - Global Tech Software Solutions",
+            body=f"Dear {employee.fullname},\n\nPlease find attached your offer letter.\n\nBest Regards,\nGlobal Tech HR",
+            to=[employee.email]
+        )
+        mail.attach(filename, pdf_content, 'application/pdf')
+        mail.send(fail_silently=False)
+
+    except Exception as e:
+        return Response({"error": f"Failed to send email: {str(e)}"}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
     return Response({
-        "message": "Offer letter generated",
-        "file_path": str(save_path),
-        "offer_date": str(today),
-        "acceptance_deadline": str(acceptance_deadline)
+        "message": "Offer letter generated, uploaded to MinIO, saved in DB, and emailed successfully.",
+        "employee": employee.fullname,
+        "file_url": file_url
     }, status=status.HTTP_200_OK)
 
 
 @api_view(['POST'])
 def releaving_letter(request):
-    # Get email from POST body
     email = request.data.get('email')
     if not email:
         return Response({"error": "Email is required"}, status=status.HTTP_400_BAD_REQUEST)
 
+    # Fetch employee
     employee = Employee.objects.filter(email=email).first()
     if not employee:
         return Response({"error": "Employee not found"}, status=status.HTTP_404_NOT_FOUND)
+
+    # Fetch corresponding User
+    try:
+        user = User.objects.get(email=employee.email)
+    except User.DoesNotExist:
+        return Response({"error": "User not found for this employee"}, status=status.HTTP_404_NOT_FOUND)
 
     today = timezone.now().date()
-    last_working_date = getattr(employee, 'last_working_date', today)
+    last_working_day = getattr(employee, 'last_working_date', today)
+    folder_name = email.split('@')[0].lower()
 
-    # Prepare context for template
-    context = {
-        'candidate_name': employee.fullname,
-        'designation': employee.designation or 'Employee',
-        'joining_date': employee.date_joined or today,
-        'last_working_date': last_working_date,
-        'company_name': 'Global Tech Software Solutions',
-        'logo_url': 'https://www.globaltechsoftwaresolutions.com/_next/image?url=%2Flogo%2FGlobal.jpg&w=64&q=75',
-        'today_date': today,
-    }
-
-    # Render HTML template
-    html = render_to_string('letters/releaving_letter.html', context)
-
-    # Generate PDF
-    pdf_file = BytesIO()
-    pisa_status = pisa.CreatePDF(html, dest=pdf_file, encoding='UTF-8')
-    if pisa_status.err:
-        return Response({"error": "Error generating PDF"}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
-
-    pdf_file.seek(0)
-
-    # Save PDF to local downloads directory
-    project_root = Path(__file__).resolve().parents[2]
-    downloads_dir = project_root / 'downloads'
-    downloads_dir.mkdir(parents=True, exist_ok=True)
-    filename = f"Releaving_Letter_{employee.fullname}.pdf".replace('/', '-').replace('\\', '-')
-    save_path = downloads_dir / filename
-    with open(save_path, 'wb') as f:
-        f.write(pdf_file.read())
-
-    return Response({
-        "message": "Releaving letter generated",
-        "file_path": str(save_path),
-        "last_working_date": str(last_working_date)
-    }, status=status.HTTP_200_OK)
-    # Get email from POST body
-    email = request.data.get('email')
-    if not email:
-        return Response({"error": "Email is required"}, status=status.HTTP_400_BAD_REQUEST)
-
-    employee = Employee.objects.filter(email=email).first()
-    if not employee:
-        return Response({"error": "Employee not found"}, status=status.HTTP_404_NOT_FOUND)
-
-    # Inputs for relieving details
-    date_of_joining = request.data.get('date_of_joining') or getattr(employee, 'date_joined', '')
-    last_working_day = request.data.get('last_working_day', '')
-    resignation_effective_date = request.data.get('resignation_effective_date', last_working_day)
-    issue_date = request.data.get('issue_date', '')
-
-    # Prepare context for HTML
+    # -------------------- Render PDF -------------------- #
     context = {
         'employee_name': employee.fullname,
         'employee_id': getattr(employee, 'employee_id', '') or getattr(employee, 'id', ''),
         'designation': employee.designation or 'Employee',
         'department': employee.department or '',
-        'date_of_joining': date_of_joining,
+        'date_of_joining': employee.date_joined or today,
         'last_working_day': last_working_day,
-        'resignation_effective_date': resignation_effective_date,
-        'issue_date': issue_date,
-        'logo_url': 'https://www.globaltechsoftwaresolutions.com/_next/image?url=%2Flogo%2FGlobal.jpg&w=64&q=75',
+        'resignation_effective_date': last_working_day,
+        'issue_date': today,
         'company_name': 'Global Tech Software Solutions',
+        'logo_url': 'https://www.globaltechsoftwaresolutions.com/_next/image?url=%2Flogo%2FGlobal.jpg&w=64&q=75',
     }
 
-    # Render HTML template
     html = render_to_string('letters/releaving_letter.html', context)
 
-    # Generate PDF
-    pdf_file = BytesIO()
-    pisa_status = pisa.CreatePDF(html, dest=pdf_file, encoding='UTF-8')
-    if pisa_status.err:
-        return Response({"error": "Error generating PDF"}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+    # PDF for MinIO
+    pdf_minio = BytesIO()
+    pisa_status_minio = pisa.CreatePDF(html, dest=pdf_minio, encoding='UTF-8')
+    if pisa_status_minio.err:
+        return Response({"error": "PDF generation failed"}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+    pdf_minio.seek(0)
 
-    pdf_file.seek(0)
+    # PDF for email
+    pdf_email = BytesIO()
+    pisa_status_email = pisa.CreatePDF(html, dest=pdf_email, encoding='UTF-8')
+    if pisa_status_email.err:
+        return Response({"error": "PDF generation for email failed"}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+    pdf_email.seek(0)
 
-    # Save to local downloads directory at project root
-    project_root = Path(__file__).resolve().parents[2]
-    downloads_dir = project_root / 'downloads'
-    downloads_dir.mkdir(parents=True, exist_ok=True)
-    filename = f"Relieving_Letter_{employee.fullname}.pdf".replace('/', '-').replace('\\', '-')
-    save_path = downloads_dir / filename
-    with open(save_path, 'wb') as f:
-        f.write(pdf_file.read())
+    # -------------------- Upload to MinIO -------------------- #
+    filename = "releaving_letter.pdf"
+    object_name = f"documents/{folder_name}/{filename}"
 
-    return Response({"message": "Relieving letter generated", "file_path": str(save_path)}, status=status.HTTP_200_OK)
+    try:
+        s3 = boto3.client(
+            's3',
+            endpoint_url='https://minio.globaltechsoftwaresolutions.cloud:9000',
+            aws_access_key_id='admin',
+            aws_secret_access_key='admin12345'
+        )
+        bucket_name = 'hrms-media'
+        s3.upload_fileobj(pdf_minio, bucket_name, object_name, ExtraArgs={'ContentType': 'application/pdf'})
+
+        file_url = f"https://minio.globaltechsoftwaresolutions.cloud:9000/{bucket_name}/{object_name}"
+
+        # Save URL to DB
+        document, created = Document.objects.get_or_create(email=user)
+        document.releaving_letter = file_url
+        document.save()
+
+    except Exception as e:
+        return Response({"error": f"MinIO upload or DB save failed: {str(e)}"}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+    # -------------------- Send Email -------------------- #
+    try:
+        pdf_email.seek(0)
+        pdf_content = pdf_email.read()
+
+        mail = EmailMessage(
+            subject="Relieving Letter - Global Tech Software Solutions",
+            body=f"Dear {employee.fullname},\n\nPlease find attached your relieving letter.\n\nBest Regards,\nGlobal Tech HR",
+            to=[employee.email]
+        )
+        mail.attach(filename, pdf_content, 'application/pdf')
+        mail.send(fail_silently=False)
+
+    except Exception as e:
+        return Response({"error": f"Failed to send email: {str(e)}"}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+    return Response({
+        "message": "Relieving letter generated, uploaded to MinIO, saved in DB, and emailed successfully.",
+        "employee": employee.fullname,
+        "file_url": file_url
+    }, status=status.HTTP_200_OK)
+
 
 @api_view(['POST'])
 def bonafide_certificate(request):
@@ -1979,53 +2066,93 @@ def bonafide_certificate(request):
     if not email:
         return Response({"error": "Email is required"}, status=status.HTTP_400_BAD_REQUEST)
 
-    # Fetch employee from DB
+    # Fetch employee
     employee = Employee.objects.filter(email=email).first()
     if not employee:
         return Response({"error": "Employee not found"}, status=status.HTTP_404_NOT_FOUND)
 
-    # Set dates
-    from datetime import datetime
+    # Fetch corresponding User
+    try:
+        user = User.objects.get(email=employee.email)
+    except User.DoesNotExist:
+        return Response({"error": "User not found for this employee"}, status=status.HTTP_404_NOT_FOUND)
 
-    # Automatically set last working day as today
-    last_working_day = datetime.today().strftime("%d-%m-%Y")
+    today = timezone.now().date()
+    last_working_day = today
+    folder_name = email.split('@')[0].lower()
 
+    # -------------------- Render PDF -------------------- #
     context = {
         'candidate_name': employee.fullname,
         'email': employee.email,
         'designation': employee.designation or "Employee",
         'department': employee.department or "N/A",
         'date_of_joining': employee.date_joined.strftime("%d-%m-%Y") if employee.date_joined else "N/A",
-        'last_working_day': last_working_day,
-        'resignation_effective_date': last_working_day,
-        'issue_date': datetime.today().strftime("%d-%m-%Y"),
+        'last_working_day': last_working_day.strftime("%d-%m-%Y"),
+        'resignation_effective_date': last_working_day.strftime("%d-%m-%Y"),
+        'issue_date': today.strftime("%d-%m-%Y"),
         'company_name': 'Global Tech Software Solutions',
         'logo_url': 'https://www.globaltechsoftwaresolutions.com/_next/image?url=%2Flogo%2FGlobal.jpg&w=64&q=75'
     }
 
-
-
-    # Render HTML
     html = render_to_string('letters/bonafide_certificate.html', context)
 
-    # Generate PDF
-    pdf_file = BytesIO()
-    pisa_status = pisa.CreatePDF(html, dest=pdf_file, encoding='UTF-8')
-    if pisa_status.err:
-        return Response({"error": "Error generating PDF"}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+    # PDF for MinIO
+    pdf_minio = BytesIO()
+    pisa_status_minio = pisa.CreatePDF(html, dest=pdf_minio, encoding='UTF-8')
+    if pisa_status_minio.err:
+        return Response({"error": "PDF generation failed"}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+    pdf_minio.seek(0)
 
-    pdf_file.seek(0)
+    # PDF for email
+    pdf_email = BytesIO()
+    pisa_status_email = pisa.CreatePDF(html, dest=pdf_email, encoding='UTF-8')
+    if pisa_status_email.err:
+        return Response({"error": "PDF generation for email failed"}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+    pdf_email.seek(0)
 
-    # Save PDF to downloads folder
-    project_root = Path(__file__).resolve().parents[2]
-    downloads_dir = project_root / 'downloads'
-    downloads_dir.mkdir(parents=True, exist_ok=True)
-    filename = f"Bonafide_Certificate_{employee.fullname}.pdf".replace('/', '-').replace('\\', '-')
-    save_path = downloads_dir / filename
-    with open(save_path, 'wb') as f:
-        f.write(pdf_file.read())
+    # -------------------- Upload to MinIO -------------------- #
+    filename = "bonafide_crt.pdf"
+    object_name = f"documents/{folder_name}/{filename}"
+
+    try:
+        s3 = boto3.client(
+            's3',
+            endpoint_url='https://minio.globaltechsoftwaresolutions.cloud:9000',
+            aws_access_key_id='admin',
+            aws_secret_access_key='admin12345'
+        )
+        bucket_name = 'hrms-media'
+        s3.upload_fileobj(pdf_minio, bucket_name, object_name, ExtraArgs={'ContentType': 'application/pdf'})
+
+        file_url = f"https://minio.globaltechsoftwaresolutions.cloud:9000/{bucket_name}/{object_name}"
+
+        # Save URL to DB
+        document, created = Document.objects.get_or_create(email=user)
+        document.bonafide_crt = file_url
+        document.save()
+
+    except Exception as e:
+        return Response({"error": f"MinIO upload or DB save failed: {str(e)}"}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+    # -------------------- Send Email -------------------- #
+    try:
+        pdf_email.seek(0)
+        pdf_content = pdf_email.read()
+
+        mail = EmailMessage(
+            subject="Bonafide Certificate - Global Tech Software Solutions",
+            body=f"Dear {employee.fullname},\n\nPlease find attached your Bonafide Certificate.\n\nBest Regards,\nGlobal Tech HR",
+            to=[employee.email]
+        )
+        mail.attach(filename, pdf_content, 'application/pdf')
+        mail.send(fail_silently=False)
+
+    except Exception as e:
+        return Response({"error": f"Failed to send email: {str(e)}"}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
     return Response({
-        "message": "Bonafide certificate generated",
-        "file_path": str(save_path)
+        "message": "Bonafide certificate generated, uploaded to MinIO, saved in DB, and emailed successfully.",
+        "employee": employee.fullname,
+        "file_url": file_url
     }, status=status.HTTP_200_OK)
