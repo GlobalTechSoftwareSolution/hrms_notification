@@ -9,17 +9,16 @@
     </style>
 </head>
 <body>
-    <h2>Chat Room: {{ room_name }}</h2>
+    <h2>Chat Room (ID: 1)</h2>
     <div id="chat-log"></div>
     <input id="chat-message-input" type="text" placeholder="Type a message..." />
     <button id="chat-message-submit">Send</button>
 
     <script>
-    const roomName = "{{ room_name }}";
-    const userEmail = prompt("Enter your email to join chat:");  // temporary input
+    const userEmail = prompt("Enter your email to join chat:");
 
     const chatSocket = new WebSocket(
-        'ws://' + window.location.host + '/ws/chat/' + roomName + '/'
+        'ws://' + window.location.host + '/ws/chat/'
     );
 
     chatSocket.onmessage = function(e) {
@@ -28,10 +27,11 @@
         const newMessage = document.createElement('p');
         newMessage.innerHTML = `<strong>${data.fullname}:</strong> ${data.message}`;
         chatLog.appendChild(newMessage);
+        chatLog.scrollTop = chatLog.scrollHeight;
     };
 
     chatSocket.onclose = function(e) {
-        console.error('Chat socket closed unexpectedly');
+        alert('Socket closed unexpectedly.');
     };
 
     document.querySelector('#chat-message-input').focus();
@@ -50,7 +50,6 @@
         }));
         messageInputDom.value = '';
     };
-</script>
-
+    </script>
 </body>
 </html>
