@@ -3,45 +3,61 @@
 <head>
     <title>Chat Room</title>
     <style>
-        #chat-log { height: 300px; overflow-y: scroll; border: 1px solid #ccc; padding: 10px; }
-        #chat-message-input { width: 70%; }
-        #chat-message-submit { width: 28%; }
-        .right { text-align: right; }
-        .left { text-align: left; }
+        #chat-log { border: 1px solid #ccc; height: 300px; overflow-y: scroll; padding: 10px; }
+        #chat-message-input { width: 80%; }
+        #chat-message-submit { width: 18%; }
+        .right { text-align: right; color: blue; }
+        .left { text-align: left; color: green; }
     </style>
 </head>
 <body>
 <h2>Chat Room</h2>
+
 <div id="chat-log"></div>
-<input id="chat-message-input" placeholder="Type message" />
+<input id="chat-message-input" type="text" placeholder="Type a message..." />
 <button id="chat-message-submit">Send</button>
-<button onclick="joinVideo()">Join Video Room</button>
 
 <script>
+// Use wss:// for secure connections in production
+const protocol = window.location.protocol === 'https:' ? 'wss://' : 'ws://';
+const chatSocket = new WebSocket(
+    protocol + window.location.host + '/ws/chat/'
+);
+
 const userEmail = "{{ request.user.email }}";
-const chatSocket = new WebSocket('ws://' + window.location.host + '/ws/chat/');
 
 chatSocket.onmessage = function(e) {
     const data = JSON.parse(e.data);
     const chatLog = document.querySelector('#chat-log');
-    const p = document.createElement('p');
-    p.className = (data.fullname === userEmail) ? "right" : "left";
-    p.innerHTML = `<strong>${data.fullname}:</strong> ${data.message}`;
-    chatLog.appendChild(p);
+    const msg = document.createElement('p');
+    msg.className = data.fullname === userEmail ? "right" : "left";
+    msg.innerHTML = `<strong>${data.fullname}:</strong> ${data.message}`;
+    chatLog.appendChild(msg);
     chatLog.scrollTop = chatLog.scrollHeight;
 };
 
-document.querySelector('#chat-message-submit').onclick = function() {
-    const msgInput = document.querySelector('#chat-message-input');
-    const msg = msgInput.value;
-    chatSocket.send(JSON.stringify({ "message": msg, "email": userEmail }));
-    msgInput.value = '';
+chatSocket.onclose = function(e) {
+    console.error('Chat socket closed unexpectedly');
 };
 
-function joinVideo() {
-    const code = prompt("Enter 4-digit room code:");
-    window.open(`/video/${code}/`, "_blank", "width=800,height=600");
-}
+chatSocket.onerror = function(err) {
+    console.error('Chat socket encountered error:', err);
+};
+
+document.querySelector('#chat-message-input').onkeyup = function(e) {
+    if (e.keyCode === 13) document.querySelector('#chat-message-submit').click();
+};
+
+document.querySelector('#chat-message-submit').onclick = function() {
+    const input = document.querySelector('#chat-message-input');
+    if (input.value.trim() !== '') {
+        chatSocket.send(JSON.stringify({
+            'message': input.value,
+            'email': userEmail
+        }));
+        input.value = '';
+    }
+};
 </script>
 </body>
 </html>

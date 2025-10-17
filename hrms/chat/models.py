@@ -9,9 +9,4 @@ class Message(models.Model):
     timestamp = models.DateTimeField(auto_now_add=True)
 
     def __str__(self):
-        return f"{self.user.email}: {self.content or 'Image'}"
-
-class VideoRoom(models.Model):
-    code = models.CharField(max_length=4, unique=True)
-    created_by = models.ForeignKey(User, on_delete=models.CASCADE)
-    created_at = models.DateTimeField(auto_now_add=True)
+        return f"{self.user.username}: {self.content or 'Message'}"
