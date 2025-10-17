@@ -1,42 +1,45 @@
 import json
 from channels.generic.websocket import AsyncWebsocketConsumer
 from channels.db import database_sync_to_async
-from accounts.models import Employee  # adjust import if path is different
 from django.contrib.auth import get_user_model
+from .models import Message
 
 User = get_user_model()
 
 class ChatConsumer(AsyncWebsocketConsumer):
-    ROOM_GROUP_NAME = "chat_1"  # fixed room id
-
     async def connect(self):
-        # Join fixed chat group
-        await self.channel_layer.group_add(
-            self.ROOM_GROUP_NAME,
-            self.channel_name
-        )
+        # Single chat room
+        self.room_group_name = "chat_1"
+        await self.channel_layer.group_add(self.room_group_name, self.channel_name)
         await self.accept()
 
+        # Send previous messages on connect
+        messages = await self.get_messages()
+        for msg in messages:
+            await self.send(text_data=json.dumps({
+                "message": msg.content,
+                "fullname": msg.user.email
+            }))
+
     async def disconnect(self, close_code):
-        await self.channel_layer.group_discard(
-            self.ROOM_GROUP_NAME,
-            self.channel_name
-        )
+        await self.channel_layer.group_discard(self.room_group_name, self.channel_name)
 
     async def receive(self, text_data):
         data = json.loads(text_data)
         message = data.get("message")
         email = data.get("email")
+        user = await self.get_user(email)
 
-        fullname = await self.get_fullname_from_email(email)
+        # Save message
+        await self.save_message(user, message)
 
-        # Broadcast message to all clients
+        # Broadcast message
         await self.channel_layer.group_send(
-            self.ROOM_GROUP_NAME,
+            self.room_group_name,
             {
                 "type": "chat_message",
                 "message": message,
-                "fullname": fullname or email,
+                "fullname": email
             }
         )
 
@@ -47,9 +50,14 @@ class ChatConsumer(AsyncWebsocketConsumer):
         }))
 
     @database_sync_to_async
-    def get_fullname_from_email(self, email):
-        try:
-            emp = Employee.objects.get(email__email=email)
-            return emp.fullname
-        except Employee.DoesNotExist:
-            return None
+    def get_user(self, email):
+        return User.objects.get(email=email)
+
+    @database_sync_to_async
+    def save_message(self, user, message):
+        Message.objects.create(user=user, content=message)
+
+    @database_sync_to_async
+    def get_messages(self):
+        # only fetch messages for room 1
+        return list(Message.objects.all().order_by("timestamp"))

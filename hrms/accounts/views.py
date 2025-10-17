@@ -345,165 +345,126 @@ def get_s3_client():
         use_ssl=settings.MINIO_STORAGE['USE_SSL']
     )
 
-# ------------------- Employee ViewSet -------------------
-class EmployeeViewSet(viewsets.ModelViewSet):
-    queryset = Employee.objects.all()
-    serializer_class = EmployeeSerializer
-    lookup_field = 'email'
+BASE_BUCKET_URL = getattr(settings, "BASE_BUCKET_URL", "https://minio.globaltechsoftwaresolutions.cloud/hrms-media/")
+BUCKET_NAME = settings.MINIO_STORAGE["BUCKET_NAME"]
 
-    # ------------------- CREATE -------------------
+# ------------------- Employee ViewSet -------------------
+class BaseUserViewSet(viewsets.ModelViewSet):
+    lookup_field = "email"
+
+    # ---------- CREATE ----------
     def create(self, request, *args, **kwargs):
         data = request.data.copy()
         profile_file = request.FILES.get('profile_picture')
-
-        serializer = EmployeeSerializer(data=data)
+        serializer = self.get_serializer(data=data)
         serializer.is_valid(raise_exception=True)
-        employee = serializer.save()
+        instance = serializer.save()
 
         if profile_file:
             client = get_s3_client()
-            bucket_name = settings.MINIO_STORAGE["BUCKET_NAME"]
-
-            # Ensure unique key per employee
             extension = profile_file.name.split('.')[-1]
-            key = f'images/{employee.email}/profile_picture.{extension}'
+            key = f'images/{instance.email}/profile_picture.{extension}'
 
             try:
-                client.upload_fileobj(
-                    profile_file,
-                    bucket_name,
-                    key,
-                    ExtraArgs={
-                        "ContentType": profile_file.content_type
-                    }
-                )
-
-                # Assign public URL
-                employee.profile_picture = f"{settings.BASE_BUCKET_URL}{key}"
-                employee.save()
-
+                client.upload_fileobj(profile_file, BUCKET_NAME, key, ExtraArgs={"ContentType": profile_file.content_type})
+                instance.profile_picture = f"{BASE_BUCKET_URL}{key}"
+                instance.save()
             except Exception as e:
-                return Response(
-                    {"error": f"File upload failed: {str(e)}"},
-                    status=status.HTTP_500_INTERNAL_SERVER_ERROR
-                )
+                return Response({"error": f"File upload failed: {str(e)}"}, status=500)
 
-        serializer = EmployeeSerializer(employee)
-        return Response(serializer.data, status=status.HTTP_201_CREATED)
+        return Response(self.get_serializer(instance).data, status=201)
 
-    # ------------------- UPDATE -------------------
-    def update(self, request, *args, **kwargs):
-        # Optional: handle profile picture update similarly
-        return super().update(request, *args, **kwargs)
-
-
-    # ------------------- PARTIAL UPDATE / UPDATE -------------------
+    # ---------- PARTIAL UPDATE (PATCH) ----------
     def partial_update(self, request, *args, **kwargs):
-        employee = self.get_object()
+        instance = self.get_object()
         updated = False
-
         client = get_s3_client()
-        bucket_name = 'hrms-media'
 
-        # Handle profile_picture replacement
+        # Handle profile_picture update
         if 'profile_picture' in request.FILES:
             file_obj = request.FILES['profile_picture']
-            key = f'images/{employee.email}/profile_picture{file_obj.name[file_obj.name.rfind("."):]}'  # deterministic key
+            ext = file_obj.name.split('.')[-1]
+            key = f'images/{instance.email}/profile_picture.{ext}'
 
-            # Delete old file if it exists
-            if employee.profile_picture and employee.profile_picture != f"{BASE_BUCKET_URL}{key}":
-                old_key = employee.profile_picture.replace(BASE_BUCKET_URL, "")
+            # Delete old one if exists
+            if instance.profile_picture and instance.profile_picture != f"{BASE_BUCKET_URL}{key}":
+                old_key = instance.profile_picture.replace(BASE_BUCKET_URL, "")
                 try:
-                    client.delete_object(Bucket=bucket_name, Key=old_key)
-                    print(f"Deleted old profile picture: {old_key}")
+                    client.delete_object(Bucket=BUCKET_NAME, Key=old_key)
                 except Exception as e:
-                    print(f"Failed to delete old profile picture: {e}")
+                    print(f"Old picture delete failed: {e}")
 
-            # Upload new profile picture
-            client.upload_fileobj(file_obj, bucket_name, key, ExtraArgs={"ACL": "public-read"})
-            employee.profile_picture = f"{BASE_BUCKET_URL}{key}"
+            # Upload new one
+            client.upload_fileobj(file_obj, BUCKET_NAME, key, ExtraArgs={"ContentType": file_obj.content_type})
+            instance.profile_picture = f"{BASE_BUCKET_URL}{key}"
             updated = True
 
         # Update other fields
         for field, value in request.data.items():
-            if hasattr(employee, field) and field != 'profile_picture':
-                if field == 'reports_to':
-                    if value:
-                        try:
-                            manager = Manager.objects.get(email=value)
-                            setattr(employee, field, manager)
-                        except Manager.DoesNotExist:
-                            return Response({"error": "Manager not found"}, status=400)
-                    else:
-                        setattr(employee, field, None)
-                else:
-                    setattr(employee, field, value)
+            if hasattr(instance, field) and field != 'profile_picture':
+                setattr(instance, field, value)
                 updated = True
 
         if updated:
-            employee.save()
+            instance.save()
 
-        serializer = EmployeeSerializer(employee)
-        return Response(serializer.data, status=200)
+        return Response(self.get_serializer(instance).data, status=200)
 
     def update(self, request, *args, **kwargs):
         return self.partial_update(request, *args, **kwargs)
 
-    # ------------------- DESTROY -------------------
+    # ---------- DESTROY (DELETE) ----------
     def destroy(self, request, *args, **kwargs):
-        employee = self.get_object()
-
+        instance = self.get_object()
         client = get_s3_client()
-        bucket_name = 'hrms-media'
 
         # Delete profile picture from MinIO
-        if employee.profile_picture:
-            old_key = employee.profile_picture.replace(BASE_BUCKET_URL, "")
+        if instance.profile_picture:
+            old_key = instance.profile_picture.replace(BASE_BUCKET_URL, "")
             try:
-                client.delete_object(Bucket=bucket_name, Key=old_key)
-                print(f"Deleted profile picture: {old_key}")
+                client.delete_object(Bucket=BUCKET_NAME, Key=old_key)
+                print(f"Deleted from MinIO: {old_key}")
             except Exception as e:
-                print(f"Failed to delete profile picture: {e}")
+                print(f"Failed to delete from MinIO: {e}")
 
-            # Set DB field to null
-            employee.profile_picture = None
-            employee.save()
+        email = instance.email
+        instance.delete()
 
-        return Response(
-            {"message": f"Profile picture for {employee.email.email} deleted and database updated."},
-            status=200
-        )
+        # Delete corresponding user record
+        try:
+            user = User.objects.get(email=email)
+            user.delete()
+            print(f"Deleted User record for {email}")
+        except User.DoesNotExist:
+            print(f"No User record found for {email}")
 
-
-
-class DepartmentViewSet(viewsets.ModelViewSet):
-    queryset = Department.objects.all()
-    serializer_class = DepartmentSerializer
-    lookup_field = 'id'
+        return Response({"message": f"{self.queryset.model.__name__} and User deleted successfully"}, status=200)
 
 
-class HRViewSet(viewsets.ModelViewSet):
+class EmployeeViewSet(BaseUserViewSet):
+    queryset = Employee.objects.all()
+    serializer_class = EmployeeSerializer
+
+
+class HRViewSet(BaseUserViewSet):
     queryset = HR.objects.all()
     serializer_class = HRSerializer
-    lookup_field = 'email'
 
 
-class ManagerViewSet(viewsets.ModelViewSet):
+class ManagerViewSet(BaseUserViewSet):
     queryset = Manager.objects.all()
     serializer_class = ManagerSerializer
-    lookup_field = 'email'
 
 
-class AdminViewSet(viewsets.ModelViewSet):
+class AdminViewSet(BaseUserViewSet):
     queryset = Admin.objects.all()
     serializer_class = AdminSerializer
-    lookup_field = 'email'
 
 
-class CEOViewSet(viewsets.ModelViewSet):
+class CEOViewSet(BaseUserViewSet):
     queryset = CEO.objects.all()
     serializer_class = CEOSerializer
-    lookup_field = 'email'
+
 
 class DocumentViewSet(viewsets.ModelViewSet):
     queryset = Document.objects.all()
@@ -514,7 +475,11 @@ class AwardViewSet(viewsets.ModelViewSet):
     queryset = Award.objects.all()
     serializer_class = AwardSerializer
     lookup_field = 'email'  # use email instead of pk
-
+    
+class DepartmentViewSet(viewsets.ModelViewSet):
+    queryset = Department.objects.all()
+    serializer_class = DepartmentSerializer
+    lookup_field = 'id'
 
 @csrf_exempt
 def apply_leave(request):
@@ -537,7 +502,7 @@ def apply_leave(request):
             email=user,
             status__in=['Pending', 'Approved'],
         ).filter(
-            Q(start_date_lte=new_end) & Q(end_date_gte=new_start)
+            Q(start_date__lte=new_end) & Q(end_date__gte=new_start)
         ).exists()
 
         if overlapping_leave_exists:
@@ -545,7 +510,6 @@ def apply_leave(request):
 
         leave = Leave.objects.create(
             email=user,
-            department=data.get("department"),
             start_date=new_start,
             end_date=new_end,
             leave_type=data.get("leave_type", ""),
@@ -556,7 +520,6 @@ def apply_leave(request):
             "message": "Leave request submitted successfully",
             "leave": {
                 "email": leave.email.email,
-                "department": leave.department,
                 "start_date": str(leave.start_date),
                 "end_date": str(leave.end_date),
                 "leave_type": leave.leave_type,
@@ -587,7 +550,6 @@ def update_leave_status(request, leave_id):
             "message": f"Leave request {new_status}",
             "leave": {
                 "email": leave.email.email,
-                "department": leave.department,
                 "start_date": str(leave.start_date),
                 "end_date": str(leave.end_date),
                 "leave_type": leave.leave_type,
@@ -616,7 +578,6 @@ def leaves_today(request):
     for leave in leaves:
         result.append({
             "email": leave.email.email,
-            "department": leave.department,
             "start_date": str(leave.start_date),
             "end_date": str(leave.end_date),
             "leave_type": leave.leave_type,
@@ -637,7 +598,6 @@ def list_leaves(request):
         result.append({
             "id": leave.id,
             "email": leave.email.email,
-            "department": leave.department,
             "start_date": str(leave.start_date),
             "end_date": str(leave.end_date),
             "leave_type": leave.leave_type,
@@ -670,10 +630,6 @@ def create_payroll(request):
         payroll = Payroll.objects.create(
             email=user,
             basic_salary=data.get("basic_salary", 0.00),
-            allowances=data.get("allowances", 0.00),
-            deductions=data.get("deductions", 0.00),
-            bonus=data.get("bonus", 0.00),
-            tax=data.get("tax", 0.00),
             month=month,
             year=year,
             status=data.get("status", "Pending")
@@ -684,11 +640,6 @@ def create_payroll(request):
             "payroll": {
                 "email": payroll.email.email,
                 "basic_salary": str(payroll.basic_salary),
-                "allowances": str(payroll.allowances),
-                "deductions": str(payroll.deductions),
-                "bonus": str(payroll.bonus),
-                "tax": str(payroll.tax),
-                "net_salary": str(payroll.net_salary),
                 "month": payroll.month,
                 "year": payroll.year,
                 "status": payroll.status,
@@ -721,11 +672,6 @@ def update_payroll_status(request, payroll_id):
             "payroll": {
                 "email": payroll.email.email,
                 "basic_salary": str(payroll.basic_salary),
-                "allowances": str(payroll.allowances),
-                "deductions": str(payroll.deductions),
-                "bonus": str(payroll.bonus),
-                "tax": str(payroll.tax),
-                "net_salary": str(payroll.net_salary),
                 "month": payroll.month,
                 "year": payroll.year,
                 "status": payroll.status,
@@ -740,28 +686,25 @@ def update_payroll_status(request, payroll_id):
 
 
 def get_payroll(request, email):
-    """Fetch payroll details for an employee"""
+    """Fetch all payroll details for an employee"""
     if request.method != "GET":
         return JsonResponse({"error": "Only GET method allowed"}, status=405)
 
     user = get_object_or_404(User, email=email)
-    payroll = get_object_or_404(Payroll, email=user)
+    payrolls = Payroll.objects.filter(email=user).order_by('-year', '-month')
 
-    return JsonResponse({
-        "payroll": {
+    payroll_list = []
+    for payroll in payrolls:
+        payroll_list.append({
             "email": payroll.email.email,
             "basic_salary": str(payroll.basic_salary),
-            "allowances": str(payroll.allowances),
-            "deductions": str(payroll.deductions),
-            "bonus": str(payroll.bonus),
-            "tax": str(payroll.tax),
-            "net_salary": str(payroll.net_salary),
             "month": payroll.month,
             "year": payroll.year,
             "status": payroll.status,
             "pay_date": str(payroll.pay_date)
-        }
-    }, status=200)
+        })
+
+    return JsonResponse({"payrolls": payroll_list}, status=200)
 
 
 @require_GET
@@ -774,11 +717,6 @@ def list_payrolls(request):
         result.append({
             "email": payroll.email.email,
             "basic_salary": str(payroll.basic_salary),
-            "allowances": str(payroll.allowances),
-            "deductions": str(payroll.deductions),
-            "bonus": str(payroll.bonus),
-            "tax": str(payroll.tax),
-            "net_salary": str(payroll.net_salary),
             "month": payroll.month,
             "year": payroll.year,
             "status": payroll.status,
@@ -800,7 +738,6 @@ def list_tasks(request):
             "description": task.description,
             "email": task.email.email,
             "assigned_by": task.assigned_by.email if task.assigned_by else None,
-            "department": task.department,
             "priority": task.priority,
             "status": task.status,
             "start_date": str(task.start_date),
@@ -823,7 +760,6 @@ def get_task(request, task_id):
             "description": task.description,
             "email": task.email.email,
             "assigned_by": task.assigned_by.email if task.assigned_by else None,
-            "department": task.department,
             "priority": task.priority,
             "status": task.status,
             "start_date": str(task.start_date),
@@ -838,14 +774,14 @@ def get_task(request, task_id):
 
 
 @csrf_exempt
-@require_http_methods(["PUT"])
+@require_http_methods(["PATCH"])
 def update_task(request, task_id):
     try:
         task = TaskTable.objects.get(pk=task_id)
         body = json.loads(request.body)
 
         # update fields if provided
-        for field in ['title', 'description', 'department', 'priority', 'status', 'start_date', 'due_date', 'completed_date']:
+        for field in ['title', 'description', 'priority', 'status', 'start_date', 'due_date', 'completed_date']:
             if field in body:
                 setattr(task, field, body[field])
 
@@ -1008,13 +944,14 @@ def list_reports(request):
             "date": str(r.date),
             "content": r.content,
             "email": r.email.email if r.email else None,
-            "created_at": r.created_at.isoformat()
+            "created_at": r.created_at.isoformat(),
+            "updated_at": r.updated_at.isoformat()
         })
     return JsonResponse({"reports": result})
 
 
 @csrf_exempt
-@require_http_methods(["PUT"])
+@require_http_methods(["PATCH"])
 def update_report(request, pk):
     try:
         report = Report.objects.get(id=pk)  # No filtering by user for testing
@@ -1037,7 +974,8 @@ def update_report(request, pk):
             "content": report.content,
             "date": str(report.date),
             "created_by": report.created_by.email if report.created_by else None,
-            "created_at": str(report.created_at)
+            "created_at": str(report.created_at),
+            "updated_at": str(report.updated_at)
         }, status=200)
     except Exception as e:
         return JsonResponse({"error": str(e)}, status=400)
@@ -1134,7 +1072,7 @@ def detail_project(request, pk):
 
 
 @csrf_exempt
-@require_http_methods(["PUT"])
+@require_http_methods(["PATCH"])
 def update_project(request, pk):
     try:
         project = Project.objects.get(id=pk)
@@ -1227,7 +1165,7 @@ def detail_notice(request, pk):
 
 
 @csrf_exempt
-@require_http_methods(["PUT"])
+@require_http_methods(["PATCH"])
 def update_notice(request, pk):
     try:
         notice = Notice.objects.get(id=pk)
@@ -1574,43 +1512,16 @@ def delete_award(request, id):
 def attendance_page(request):
     return render(request, 'attendance.html')
 
+
 class TicketViewSet(viewsets.ModelViewSet):
     queryset = Ticket.objects.all()
     serializer_class = TicketSerializer
+    permission_classes = [AllowAny]  # allow all requests
 
-    # GET: view all tickets where email = owner OR assigned_to = this email
-    def list_by_email(self, request, email=None):
-        tickets = Ticket.objects.filter(
-            models.Q(email__email=email) | models.Q(assigned_to__email=email)
-        ).order_by('-created_at')
+    # Optional: filter tickets by assigned_to if needed
+    def get_queryset(self):
+        return Ticket.objects.all()
 
-        serializer = self.get_serializer(tickets, many=True)
-        return Response(serializer.data)
-
-    # PATCH: update status only if the assigned_to email matches
-    def patch_status_by_email(self, request, email=None):
-        ticket_id = request.data.get('id')
-        new_status = request.data.get('status')
-
-        if not ticket_id or not new_status:
-            return Response({"error": "Both 'id' and 'status' are required."}, status=status.HTTP_400_BAD_REQUEST)
-
-        # Find the ticket by id
-        ticket = get_object_or_404(Ticket, id=ticket_id)
-
-        # Check if the email is the assigned person
-        if not ticket.assigned_to or ticket.assigned_to.email != email:
-            return Response({"error": "Only the assigned person can update the status."}, status=status.HTTP_403_FORBIDDEN)
-
-        # Validate status
-        if new_status not in dict(Ticket._meta.get_field('status').choices):
-            return Response({"error": f"Invalid status: {new_status}"}, status=status.HTTP_400_BAD_REQUEST)
-
-        ticket.status = new_status
-        ticket.save()
-
-        serializer = self.get_serializer(ticket)
-        return Response(serializer.data)
 
 
 @api_view(['POST'])

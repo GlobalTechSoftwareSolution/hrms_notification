@@ -143,12 +143,42 @@ class DocumentSerializer(serializers.ModelSerializer):
         model = Document
         fields = '__all__'
 
+
 class AwardSerializer(serializers.ModelSerializer):
     class Meta:
         model = Award
         fields = '__all__'
 
+
 class TicketSerializer(serializers.ModelSerializer):
+    assigned_by = serializers.SlugRelatedField(
+        queryset=User.objects.all(), slug_field='email'
+    )
+    assigned_to = serializers.SlugRelatedField(
+        queryset=User.objects.all(), slug_field='email'
+    )
+    closed_by = serializers.SlugRelatedField(
+        queryset=User.objects.all(), slug_field='email', required=False, allow_null=True
+    )
+    closed_to = serializers.SlugRelatedField(
+        queryset=User.objects.all(), slug_field='email', required=False, allow_null=True
+    )
+
     class Meta:
         model = Ticket
         fields = '__all__'
+
+    def validate(self, data):
+        # On creation: assigned_by must not be equal to assigned_to
+        if self.instance is None:
+            if data['assigned_by'] == data['assigned_to']:
+                raise serializers.ValidationError("assigned_by and assigned_to cannot be the same.")
+        
+        # On update: if closed_by or closed_to is set, enforce workflow
+        if self.instance is not None:
+            if 'closed_by' in data or 'closed_to' in data:
+                if data.get('closed_by') != self.instance.assigned_to:
+                    raise serializers.ValidationError("closed_by must be the assigned_to user (User B).")
+                if data.get('closed_to') != self.instance.assigned_by:
+                    raise serializers.ValidationError("closed_to must be the assigned_by user (User A).")
+        return data

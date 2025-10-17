@@ -57,7 +57,7 @@ class HR(models.Model):
     date_joined = models.DateField(null=True, blank=True)
     qualification = models.CharField(max_length=255, null=True, blank=True)
     skills = models.TextField(null=True, blank=True)
-    profile_picture = models.ImageField(upload_to='images/', null=True, blank=True)
+    profile_picture = models.URLField(null=True, blank=True)
 
     def _str_(self):
         return f"{self.fullname} (HR)"
@@ -73,7 +73,7 @@ class CEO(models.Model):
     date_joined = models.DateField(null=True, blank=True)
     total_experience = models.DecimalField(max_digits=4, decimal_places=1, null=True, blank=True)
     bio = models.TextField(null=True, blank=True)
-    profile_picture = models.ImageField(upload_to='images/', null=True, blank=True)
+    profile_picture = models.URLField(null=True, blank=True)
 
     def _str_(self):
         return f"{self.fullname} (CEO)"
@@ -90,7 +90,7 @@ class Manager(models.Model):
     date_joined = models.DateField(null=True, blank=True)
     manager_level = models.CharField(max_length=50, null=True, blank=True)
     projects_handled = models.TextField(null=True, blank=True)
-    profile_picture = models.ImageField(upload_to='images/', null=True, blank=True)
+    profile_picture = models.URLField(null=True, blank=True)
 
     def _str_(self):
         return f"{self.fullname} (Manager)"
@@ -191,7 +191,7 @@ class Admin(models.Model):
     fullname = models.CharField(max_length=255)
     phone = models.CharField(max_length=20, null=True, blank=True)
     office_address = models.TextField(null=True, blank=True)
-    profile_picture = models.ImageField(upload_to='images/', null=True, blank=True)
+    profile_picture = models.URLField(null=True, blank=True)
 
     def _str_(self):
         return f"{self.fullname} (Admin)"
@@ -230,7 +230,6 @@ class Attendance(models.Model):
 class Leave(models.Model):
     id = models.AutoField(primary_key=True)
     email = models.ForeignKey(User, on_delete=models.CASCADE, to_field='email')
-    department = models.CharField(max_length=100)
     start_date = models.DateField()
     end_date = models.DateField()
     leave_type = models.CharField(max_length=50, null=True, blank=True)
@@ -249,11 +248,6 @@ class Payroll(models.Model):
     id = models.AutoField(primary_key=True)
     email = models.ForeignKey(User, on_delete=models.CASCADE, to_field='email')
     basic_salary = models.DecimalField(max_digits=10, decimal_places=2, default=0.00)
-    allowances = models.DecimalField(max_digits=10, decimal_places=2, default=0.00)
-    deductions = models.DecimalField(max_digits=10, decimal_places=2, default=0.00)
-    bonus = models.DecimalField(max_digits=10, decimal_places=2, default=0.00)
-    tax = models.DecimalField(max_digits=10, decimal_places=2, default=0.00)
-    net_salary = models.DecimalField(max_digits=10, decimal_places=2, default=0.00)
     pay_date = models.DateField(default=timezone.localdate)
     month = models.CharField(max_length=20)
     year = models.IntegerField(default=timezone.now().year)
@@ -292,7 +286,6 @@ class TaskTable(models.Model):
         blank=True,
         related_name="tasks_assigned"
     )
-    department = models.CharField(max_length=100, null=True, blank=True)
     priority = models.CharField(
         max_length=20,
         choices=[
@@ -409,52 +402,41 @@ class Notice(models.Model):
 
     def __str__(self):
         return self.title
-    
+
 
 class Ticket(models.Model):
-    id = models.AutoField(primary_key=True)
-    email = models.ForeignKey(
-        User,
-        on_delete=models.CASCADE,
-        to_field='email',
-        related_name='tickets'
-    )
+    STATUS_CHOICES = [
+        ('Open', 'Open'),
+        ('In Progress', 'In Progress'),
+        ('Closed', 'Closed'),
+    ]
+    
+    PRIORITY_CHOICES = [
+        ('Low', 'Low'),
+        ('Medium', 'Medium'),
+        ('High', 'High'),
+        ('Urgent', 'Urgent'),
+    ]
+
     subject = models.CharField(max_length=255)
-    description = models.TextField(null=True, blank=True)
-    status = models.CharField(
-        max_length=20,
-        choices=[
-            ('Open', 'Open'),
-            ('In Progress', 'In Progress'),
-            ('Resolved', 'Resolved'),
-            ('Closed', 'Closed'),
-        ],
-        default='Open'
-    )
-    priority = models.CharField(
-        max_length=20,
-        choices=[
-            ('Low', 'Low'),
-            ('Medium', 'Medium'),
-            ('High', 'High'),
-            ('Critical', 'Critical'),
-        ],
-        default='Medium'
-    )
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='Open')
+    description = models.TextField(blank=True, null=True)
+    priority = models.CharField(max_length=20, choices=PRIORITY_CHOICES, default='Medium')
+    
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
-    assigned_to = models.ForeignKey(
-        User,
-        on_delete=models.SET_NULL,
-        null=True,
-        blank=True,
-        related_name='assigned_tickets'
-    )
+    closed_description = models.TextField(blank=True, null=True)
+    
+    assigned_by = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, related_name='tickets_assigned_by')
+    assigned_to = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, related_name='tickets_assigned_to')
+    closed_by = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, blank=True, related_name='tickets_closed_by')
+    closed_to = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, blank=True, related_name='tickets_closed_to')
 
     def __str__(self):
-        return f"Ticket #{self.id} - {self.subject} ({self.status})"
+        return f"{self.subject} - {self.status}"
 
-
+    class Meta:
+        ordering = ['-created_at']
 
 # class my_user(models.Model):
 #     username = models.CharField(max_length=100)
