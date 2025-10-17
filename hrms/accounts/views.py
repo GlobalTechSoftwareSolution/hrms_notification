@@ -5,6 +5,7 @@ from pathlib import Path
 from datetime import datetime, timedelta
 from geopy.distance import geodesic
 from xhtml2pdf import pisa
+from threading import Thread
 
 from django.conf import settings
 from django.utils import timezone
@@ -55,18 +56,6 @@ OFFICE_LON = 77.55541294505542
 LOCATION_RADIUS_METERS = 100  # 100m allowed radius
 IST = pytz.timezone("Asia/Kolkata")
 
-# Utility functions
-# def get_s3_client():
-#     minio_conf = getattr(settings, "MINIO_STORAGE")
-#     protocol = "https" if minio_conf.get("USE_SSL", False) else "http"
-#     client = boto3.client(
-#         "s3",
-#         endpoint_url=f"{protocol}://{minio_conf['ENDPOINT']}",
-#         aws_access_key_id=minio_conf["ACCESS_KEY"],
-#         aws_secret_access_key=minio_conf["SECRET_KEY"],
-#         verify=True
-#     )
-#     return client
 
 def verify_location(latitude, longitude, radius_meters=None):
     """Verify if user is within allowed radius of office"""
@@ -323,17 +312,6 @@ class UserViewSet(viewsets.ModelViewSet):
         if self.action in ['create', 'update', 'partial_update']:
             return UserRegistrationSerializer
         return UserSerializer
-
-
-# BASE_BUCKET_URL = getattr(settings, "BASE_BUCKET_URL", "https://minio.globaltechsoftwaresolutions.cloud/browser/hrms-media/")
-
-
-from rest_framework import viewsets, status
-from rest_framework.response import Response
-from django.conf import settings
-import boto3
-from .models import Employee
-from .serializers import EmployeeSerializer
 
 # ------------------- S3 Client -------------------
 def get_s3_client():
@@ -825,7 +803,6 @@ def create_task(request):
         assigned_by_email = data.get("assigned_by")
         title = data.get("title")
         description = data.get("description", "")
-        department = data.get("department", "")
         priority = data.get("priority", "Medium")
         status = data.get("status", "Pending")
         start_date = data.get("start_date", str(timezone.localdate()))
@@ -848,7 +825,6 @@ def create_task(request):
             assigned_by=assigned_by_user,
             title=title,
             description=description,
-            department=department,
             priority=priority,
             status=status,
             start_date=start_date,
@@ -1227,7 +1203,6 @@ def get_tasks_by_assigned_by(request, assigned_by_email):
                 "description": task.description,
                 "email": task.email.email,
                 "assigned_by": task.assigned_by.email if task.assigned_by else None,
-                "department": task.department,
                 "priority": task.priority,
                 "status": task.status,
                 "start_date": str(task.start_date),
@@ -1639,7 +1614,20 @@ def mark_attendance_view(request):
 
 token_generator = PasswordResetTokenGenerator()
 
+# Helper function to send email asynchronously
+def send_email_async(subject, plain_message, html_message, recipient_email):
+    send_mail(
+        subject=subject,
+        message=plain_message,
+        html_message=html_message,
+        from_email=settings.DEFAULT_FROM_EMAIL,
+        recipient_list=[recipient_email],
+        fail_silently=False,
+    )
+
 class RequestPasswordResetView(APIView):
+    permission_classes = []  # No auth required
+
     def post(self, request):
         email = request.data.get('email')
         if not email:
@@ -1650,42 +1638,40 @@ class RequestPasswordResetView(APIView):
         except User.DoesNotExist:
             return Response({'error': 'No account found with this email'}, status=status.HTTP_404_NOT_FOUND)
 
+        # Generate UID and token
         uidb64 = urlsafe_base64_encode(force_bytes(user.pk))
         token = token_generator.make_token(user)
         reset_link = f"{settings.FRONTEND_URL}/reset-password/{uidb64}/{token}/"
 
-        # Render HTML template
+        # Render HTML template (your existing template)
         html_message = render_to_string('emails/password_reset.html', {
             'reset_link': reset_link,
             'current_year': datetime.now().year
         })
 
-        # Plain text version
+        # Plain text fallback
         plain_message = f"""
-            Password Reset Request
+Password Reset Request
 
-            Hello,
+Hello,
 
-            We received a request to reset your password. Click the link below to create a new password:
+We received a request to reset your password. Click the link below to create a new password:
 
-            {reset_link}
+{reset_link}
 
-            This link will expire in 24 hours for security reasons.
+This link will expire in 24 hours for security reasons.
 
-            If you didn't request a password reset, please ignore this email.
+If you didn't request a password reset, please ignore this email.
 
-            Best regards,
-            Your Company Name
-        """
+Best regards,
+Your Company Name
+"""
 
-        send_mail(
-            subject='Password Reset Request',
-            message=plain_message,
-            html_message=html_message,
-            from_email=settings.DEFAULT_FROM_EMAIL,
-            recipient_list=[email],
-            fail_silently=False,
-        )
+        # Send email asynchronously using threading
+        Thread(
+            target=send_email_async,
+            args=('Password Reset Request', plain_message, html_message, email)
+        ).start()
 
         return Response({'message': 'Password reset link sent successfully'}, status=status.HTTP_200_OK)
 
