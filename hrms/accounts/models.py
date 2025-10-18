@@ -123,7 +123,7 @@ class Employee(models.Model):
     gender = models.CharField(max_length=20, null=True, blank=True)
     marital_status = models.CharField(max_length=20, null=True, blank=True)
     nationality = models.CharField(max_length=50, null=True, blank=True)
-    current_address = models.TextField(null=True, blank=True)
+    residential_address = models.TextField(null=True, blank=True)
     permanent_address = models.TextField(null=True, blank=True)
     emergency_contact_name = models.CharField(max_length=100, null=True, blank=True)
     emergency_contact_relationship = models.CharField(max_length=50, null=True, blank=True)
@@ -137,6 +137,23 @@ class Employee(models.Model):
     institution = models.CharField(max_length=255, null=True, blank=True)
     grade = models.CharField(max_length=20, null=True, blank=True)
     languages = models.TextField(null=True, blank=True)
+    BLOOD_GROUP_CHOICES = [
+        ('A+', 'A+'),
+        ('A-', 'A-'),
+        ('B+', 'B+'),
+        ('B-', 'B-'),
+        ('AB+', 'AB+'),
+        ('AB-', 'AB-'),
+        ('O+', 'O+'),
+        ('O-', 'O-'),
+    ]
+
+    blood_group = models.CharField(
+        max_length=3,
+        choices=BLOOD_GROUP_CHOICES,
+        null=True,
+        blank=True
+    )
 
     def __str__(self):
         return f"{self.fullname} (Employee)"
@@ -180,8 +197,7 @@ class Award(models.Model):
     email = models.ForeignKey(User, on_delete=models.CASCADE, to_field='email', related_name='awards')
     title = models.CharField(max_length=255)
     description = models.TextField(null=True, blank=True)
-    date = models.DateField(null=True, blank=True)
-    photo = models.ImageField(upload_to='awards/photos/', null=True, blank=True)
+    photo = models.URLField(max_length=500, null=True, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
 
     def __str__(self):
@@ -352,3 +368,42 @@ class Ticket(models.Model):
 
     def __str__(self):
         return f"{self.subject} - {self.status}"
+
+class EmployeeDetails(models.Model):
+    email = models.ForeignKey(User, on_delete=models.CASCADE, to_field='email', related_name='employee_details')
+    father_name = models.CharField(max_length=100)
+    father_contact = models.CharField(max_length=20)
+    mother_name = models.CharField(max_length=100)
+    mother_contact = models.CharField(max_length=20)
+    wife_name = models.CharField(max_length=100)
+    home_address = models.TextField()
+    total_siblings = models.PositiveIntegerField()
+    brothers = models.PositiveIntegerField()
+    sisters = models.PositiveIntegerField()
+    total_children = models.PositiveIntegerField()
+    bank_name = models.CharField(max_length=100)
+    branch = models.CharField(max_length=100)
+    pf_no = models.CharField(max_length=50)
+    pf_uan = models.CharField(max_length=50)
+    ifsc = models.CharField(max_length=20)
+    
+    def __str__(self):
+        return f"Employee Details of {self.email.email}"
+    
+
+class ReleavedEmployee(models.Model):
+    email = models.EmailField(unique=True)  # stores plain email only
+    fullname = models.CharField(max_length=255, blank=True, null=True)
+    phone = models.CharField(max_length=20, blank=True, null=True)
+    role = models.CharField(max_length=50, blank=True, null=True)  # e.g. "employee", "hr", "admin"
+    designation = models.CharField(max_length=100, blank=True, null=True)
+    offboarded_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        db_table = 'accounts_releavedemployees'
+        verbose_name = "Releaved Employee"
+        verbose_name_plural = "Releaved Employees"
+
+    def __str__(self):
+        return self.email  # ✅ Only shows email (not with role)
+

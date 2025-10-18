@@ -37,14 +37,14 @@ from rest_framework.decorators import api_view, permission_classes
 from .models import (
     User, CEO, HR, Manager, Department, Employee, Attendance, Admin,
     Leave, Payroll, TaskTable, Project, Notice, Report,
-    Document, Award, Ticket
+    Document, Award, Ticket, EmployeeDetails, ReleavedEmployee
 )
 
 # Serializers
 from .serializers import (
     UserSerializer, CEOSerializer, HRSerializer, ManagerSerializer, DepartmentSerializer,
     EmployeeSerializer, SuperUserCreateSerializer, UserRegistrationSerializer,
-    AdminSerializer, ReportSerializer, RegisterSerializer, DocumentSerializer, AwardSerializer, TicketSerializer
+    AdminSerializer, ReportSerializer, RegisterSerializer, DocumentSerializer, AwardSerializer, TicketSerializer, EmployeeDetailsSerializer
 )
 
 # Ensure User model points to custom one
@@ -314,6 +314,22 @@ class UserViewSet(viewsets.ModelViewSet):
         return UserSerializer
 
 # ------------------- S3 Client -------------------
+# ------------------- MinIO Client -------------------
+
+import json
+import boto3
+from django.conf import settings
+from rest_framework import viewsets
+from rest_framework.response import Response
+from django.contrib.auth import get_user_model
+from django.shortcuts import get_object_or_404
+
+from .models import Employee, EmployeeDetails, HR, Manager, Admin, CEO
+from .serializers import EmployeeSerializer, HRSerializer, ManagerSerializer, AdminSerializer, CEOSerializer
+
+User = get_user_model()
+
+# ------------------- MinIO Client -------------------
 def get_s3_client():
     return boto3.client(
         's3',
@@ -326,9 +342,41 @@ def get_s3_client():
 BASE_BUCKET_URL = getattr(settings, "BASE_BUCKET_URL", "https://minio.globaltechsoftwaresolutions.cloud/hrms-media/")
 BUCKET_NAME = settings.MINIO_STORAGE["BUCKET_NAME"]
 
-# ------------------- Employee ViewSet -------------------
+# ------------------- Base ViewSet -------------------
 class BaseUserViewSet(viewsets.ModelViewSet):
     lookup_field = "email"
+
+    def _upload_profile_picture(self, instance, file_obj):
+        client = get_s3_client()
+        ext = file_obj.name.split('.')[-1]
+        key = f'images/{instance.email}/profile_picture.{ext}'
+
+        # Delete old picture
+        if hasattr(instance, "profile_picture") and instance.profile_picture and instance.profile_picture != f"{BASE_BUCKET_URL}{key}":
+            old_key = instance.profile_picture.replace(BASE_BUCKET_URL, "")
+            try:
+                client.delete_object(Bucket=BUCKET_NAME, Key=old_key)
+            except Exception as e:
+                print(f"Failed to delete old picture: {e}")
+
+        # Upload new picture
+        client.upload_fileobj(file_obj, BUCKET_NAME, key, ExtraArgs={"ContentType": file_obj.content_type})
+        instance.profile_picture = f"{BASE_BUCKET_URL}{key}"
+        instance.save()
+
+    def _update_employee_details(self, instance, data):
+        details_fields = [
+            'father_name', 'father_contact', 'mother_name', 'mother_contact',
+            'wife_name', 'home_address', 'total_siblings', 'brothers',
+            'sisters', 'total_children', 'bank_name', 'branch', 'pf_no',
+            'pf_uan', 'ifsc'
+        ]
+        details_data = {f: data.get(f) for f in details_fields if data.get(f) is not None}
+        if details_data:
+            details, _ = EmployeeDetails.objects.get_or_create(email=instance.email)
+            for field, value in details_data.items():
+                setattr(details, field, value)
+            details.save()
 
     # ---------- CREATE ----------
     def create(self, request, *args, **kwargs):
@@ -339,45 +387,25 @@ class BaseUserViewSet(viewsets.ModelViewSet):
         instance = serializer.save()
 
         if profile_file:
-            client = get_s3_client()
-            extension = profile_file.name.split('.')[-1]
-            key = f'images/{instance.email}/profile_picture.{extension}'
+            self._upload_profile_picture(instance, profile_file)
 
-            try:
-                client.upload_fileobj(profile_file, BUCKET_NAME, key, ExtraArgs={"ContentType": profile_file.content_type})
-                instance.profile_picture = f"{BASE_BUCKET_URL}{key}"
-                instance.save()
-            except Exception as e:
-                return Response({"error": f"File upload failed: {str(e)}"}, status=500)
+        # Update related EmployeeDetails if applicable
+        if hasattr(instance, "email"):
+            self._update_employee_details(instance, data)
 
         return Response(self.get_serializer(instance).data, status=201)
 
-    # ---------- PARTIAL UPDATE (PATCH) ----------
+    # ---------- PARTIAL UPDATE ----------
     def partial_update(self, request, *args, **kwargs):
         instance = self.get_object()
         updated = False
-        client = get_s3_client()
 
-        # Handle profile_picture update
+        # Profile picture
         if 'profile_picture' in request.FILES:
-            file_obj = request.FILES['profile_picture']
-            ext = file_obj.name.split('.')[-1]
-            key = f'images/{instance.email}/profile_picture.{ext}'
-
-            # Delete old one if exists
-            if instance.profile_picture and instance.profile_picture != f"{BASE_BUCKET_URL}{key}":
-                old_key = instance.profile_picture.replace(BASE_BUCKET_URL, "")
-                try:
-                    client.delete_object(Bucket=BUCKET_NAME, Key=old_key)
-                except Exception as e:
-                    print(f"Old picture delete failed: {e}")
-
-            # Upload new one
-            client.upload_fileobj(file_obj, BUCKET_NAME, key, ExtraArgs={"ContentType": file_obj.content_type})
-            instance.profile_picture = f"{BASE_BUCKET_URL}{key}"
+            self._upload_profile_picture(instance, request.FILES['profile_picture'])
             updated = True
 
-        # Update other fields
+        # Update main model fields
         for field, value in request.data.items():
             if hasattr(instance, field) and field != 'profile_picture':
                 setattr(instance, field, value)
@@ -386,39 +414,107 @@ class BaseUserViewSet(viewsets.ModelViewSet):
         if updated:
             instance.save()
 
+        # Update related EmployeeDetails if applicable
+        if hasattr(instance, "email"):
+            self._update_employee_details(instance, request.data)
+
         return Response(self.get_serializer(instance).data, status=200)
 
     def update(self, request, *args, **kwargs):
         return self.partial_update(request, *args, **kwargs)
 
-    # ---------- DESTROY (DELETE) ----------
-    def destroy(self, request, *args, **kwargs):
-        instance = self.get_object()
-        client = get_s3_client()
-
-        # Delete profile picture from MinIO
-        if instance.profile_picture:
-            old_key = instance.profile_picture.replace(BASE_BUCKET_URL, "")
-            try:
-                client.delete_object(Bucket=BUCKET_NAME, Key=old_key)
-                print(f"Deleted from MinIO: {old_key}")
-            except Exception as e:
-                print(f"Failed to delete from MinIO: {e}")
-
-        email = instance.email
-        instance.delete()
-
-        # Delete corresponding user record
+    # ---------- DESTROY ----------
+    def destroy(self, request, email=None):
         try:
-            user = User.objects.get(email=email)
-            user.delete()
-            print(f"Deleted User record for {email}")
-        except User.DoesNotExist:
-            print(f"No User record found for {email}")
+            # 1️⃣ Fetch employee
+            employee = get_object_or_404(Employee, email=email)
 
-        return Response({"message": f"{self.queryset.model.__name__} and User deleted successfully"}, status=200)
+            # 2️⃣ Extract plain email string
+            if hasattr(employee.email, "email"):  # ForeignKey(User)
+                email_str = employee.email.email
+            else:
+                email_str = employee.email
+
+            # 3️⃣ Create ReleavedEmployee entry with plain email
+            ReleavedEmployee.objects.create(
+                email=email_str,
+                fullname=getattr(employee, "fullname", None),
+                phone=getattr(employee, "phone", None),
+                designation=getattr(employee, "designation", None),
+                role="employee"  # explicitly set which table they came from
+            )
+
+            # 4️⃣ Delete related EmployeeDetails
+            try:
+                user_obj = User.objects.filter(email=email_str).first()
+                if user_obj:
+                    EmployeeDetails.objects.filter(email=user_obj).delete()
+            except Exception as e:
+                print(f"[WARN] Error deleting EmployeeDetails: {e}")
+
+            # 5️⃣ Delete profile picture from MinIO
+            if hasattr(employee, "profile_picture") and employee.profile_picture:
+                client = get_s3_client()
+                key = employee.profile_picture.replace(BASE_BUCKET_URL, "")
+                try:
+                    client.delete_object(Bucket=BUCKET_NAME, Key=key)
+                except Exception as e:
+                    print(f"[WARN] Failed to delete profile picture from MinIO: {e}")
+
+            # 6️⃣ Delete main Employee and related User safely
+            employee.delete()
+            user = User.objects.filter(email=email_str).first()
+            if user:
+                user.delete()
+
+            return Response(
+                {"message": f"{email_str} successfully offboarded and moved to ReleavedEmployee."},
+                status=status.HTTP_200_OK
+            )
+
+        except Exception as e:
+            return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+    # ---------- RETRIEVE ----------
+    def retrieve(self, request, *args, **kwargs):
+        instance = self.get_object()
+        instance_data = self.get_serializer(instance).data
+
+        # Fetch EmployeeDetails via User
+        user = getattr(instance, 'email', None)  # Employee.email is a FK to User
+        if user:
+            try:
+                details = EmployeeDetails.objects.get(email=user)
+                for field in details._meta.fields:
+                    if field.name not in ['id', 'email']:
+                        instance_data[field.name] = getattr(details, field.name)
+            except EmployeeDetails.DoesNotExist:
+                pass
+
+        return Response(instance_data)
 
 
+    # ---------- LIST ----------
+    def list(self, request, *args, **kwargs):
+        queryset = self.get_queryset()
+        data = []
+        for instance in queryset:
+            instance_data = self.get_serializer(instance).data
+            user = getattr(instance, 'email', None)
+            if user:
+                try:
+                    details = EmployeeDetails.objects.get(email=user)
+                    for field in details._meta.fields:
+                        if field.name not in ['id', 'email']:
+                            instance_data[field.name] = getattr(details, field.name)
+                except EmployeeDetails.DoesNotExist:
+                    pass
+            data.append(instance_data)
+        return Response(data)
+
+
+
+# ------------------- Role-specific ViewSets -------------------
 class EmployeeViewSet(BaseUserViewSet):
     queryset = Employee.objects.all()
     serializer_class = EmployeeSerializer
@@ -1415,22 +1511,83 @@ def get_document(request, email):
 
     return JsonResponse(data, safe=False)
 
-
-
 @csrf_exempt
 def create_award(request):
     if request.method == "POST":
-        data = request.POST
+        import json
+
+        # Handle JSON or form data
+        if request.content_type == "application/json":
+            data = json.loads(request.body)
+        else:
+            data = request.POST
+
         email = data.get("email")
         user = get_object_or_404(User, email=email)
+
         award = Award.objects.create(
             email=user,
             title=data.get("title"),
             description=data.get("description"),
-            date=data.get("date"),
-            photo=request.FILES.get("photo"),
         )
+
+        # Photo upload
+        photo_file = request.FILES.get("photo")
+        if photo_file:
+            client = get_s3_client()
+            extension = photo_file.name.split('.')[-1]
+            key = f'awards/{award.id}.{extension}'
+            try:
+                client.upload_fileobj(photo_file, BUCKET_NAME, key, ExtraArgs={"ContentType": photo_file.content_type})
+                award.photo = f"{BASE_BUCKET_URL}{key}"
+                award.save()
+            except Exception as e:
+                return JsonResponse({"error": f"File upload failed: {str(e)}"}, status=500)
+
         return JsonResponse({"message": "Award created", "id": award.id})
+    else:
+        return JsonResponse({"error": "POST method required"}, status=405)
+
+
+@csrf_exempt
+def update_award(request, id):
+    if request.method in ["POST", "PATCH"]:
+        award = get_object_or_404(Award, id=id)
+
+        # Handle JSON or form data
+        if request.content_type == "application/json":
+            import json
+            data = json.loads(request.body)
+        else:
+            data = request.POST
+
+        # Update text fields
+        for field in ["title", "description"]:
+            value = data.get(field)
+            if value:
+                setattr(award, field, value)
+
+        # Update photo in MinIO
+        photo_file = request.FILES.get("photo")
+        if photo_file:
+            client = get_s3_client()
+            extension = photo_file.name.split('.')[-1]
+            key = f'awards/{award.id}.{extension}'
+
+            # Delete old photo if exists
+            if award.photo and award.photo.startswith(BASE_BUCKET_URL):
+                old_key = award.photo.replace(BASE_BUCKET_URL, "")
+                try:
+                    client.delete_object(Bucket=BUCKET_NAME, Key=old_key)
+                except Exception as e:
+                    print(f"Failed to delete old photo: {e}")
+
+            # Upload new photo
+            client.upload_fileobj(photo_file, BUCKET_NAME, key, ExtraArgs={"ContentType": photo_file.content_type})
+            award.photo = f"{BASE_BUCKET_URL}{key}"
+
+        award.save()
+        return JsonResponse({"message": "Award updated"})
 
 
 def list_awards(request):
@@ -1442,8 +1599,8 @@ def list_awards(request):
             "email": a.email.email,
             "title": a.title,
             "description": a.description,
-            "date": a.date,
-            "photo": a.photo.url if a.photo else None,
+            "photo": a.photo if a.photo else None,
+            "created_at": a.created_at.strftime("%Y-%m-%d %H:%M:%S"),  # Format datetime as string
         })
     return JsonResponse(data, safe=False)
 
@@ -1455,32 +1612,31 @@ def get_award(request, id):
         "email": a.email.email,
         "title": a.title,
         "description": a.description,
-        "date": a.date,
-        "photo": a.photo.url if a.photo else None,
+        "photo": a.photo if a.photo else None,
+        "created_at": a.created_at.strftime("%Y-%m-%d %H:%M:%S"),  # Include created_at
     }
     return JsonResponse(data)
 
 
 @csrf_exempt
-def update_award(request, id):
-    if request.method in ["POST", "PATCH"]:
-        a = get_object_or_404(Award, id=id)
-        data = request.POST
-        for field in ["title", "description", "date"]:
-            if data.get(field):
-                setattr(a, field, data.get(field))
-        if request.FILES.get("photo"):
-            a.photo = request.FILES.get("photo")
-        a.save()
-        return JsonResponse({"message": "Award updated"})
-
-
-@csrf_exempt
 def delete_award(request, id):
     if request.method == "DELETE":
-        a = get_object_or_404(Award, id=id)
-        a.delete()
-        return JsonResponse({"message": "Award deleted"})
+        award = get_object_or_404(Award, id=id)
+        client = get_s3_client()
+
+        # Delete photo from MinIO if it exists
+        if award.photo and award.photo.startswith(BASE_BUCKET_URL):
+            old_key = award.photo.replace(BASE_BUCKET_URL, "")
+            try:
+                client.delete_object(Bucket=BUCKET_NAME, Key=old_key)
+                print(f"Deleted photo from MinIO: {old_key}")
+            except Exception as e:
+                print(f"Failed to delete photo from MinIO: {e}")
+
+        award.delete()
+        return JsonResponse({"message": "Award and photo deleted successfully"})
+    else:
+        return JsonResponse({"error": "DELETE method required"}, status=405)
 
 
 # Attendance HTML page
@@ -1496,7 +1652,6 @@ class TicketViewSet(viewsets.ModelViewSet):
     # Optional: filter tickets by assigned_to if needed
     def get_queryset(self):
         return Ticket.objects.all()
-
 
 
 @api_view(['POST'])

@@ -237,7 +237,7 @@ class Migration(migrations.Migration):
                 ('gender', models.CharField(blank=True, max_length=20, null=True)),
                 ('marital_status', models.CharField(blank=True, max_length=20, null=True)),
                 ('nationality', models.CharField(blank=True, max_length=50, null=True)),
-                ('current_address', models.TextField(blank=True, null=True)),
+                ('residential_address', models.TextField(blank=True, null=True)),
                 ('permanent_address', models.TextField(blank=True, null=True)),
                 ('emergency_contact_name', models.CharField(blank=True, max_length=100, null=True)),
                 ('emergency_contact_relationship', models.CharField(blank=True, max_length=50, null=True)),

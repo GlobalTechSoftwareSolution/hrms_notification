@@ -1,6 +1,7 @@
 CREATE OR REPLACE FUNCTION manage_role_tables_on_user_change()
 RETURNS TRIGGER AS $$
 BEGIN
+  -- Handle INSERT or UPDATE
   IF (TG_OP = 'INSERT') OR
      (TG_OP = 'UPDATE' AND (NEW.is_staff <> OLD.is_staff OR NEW.role <> OLD.role)) THEN
 
@@ -11,8 +12,10 @@ BEGIN
     DELETE FROM accounts_employee WHERE email_id = NEW.email;
     DELETE FROM accounts_admin WHERE email_id = NEW.email;
 
+    -- Delete existing employee details if role changed
+    DELETE FROM accounts_employeedetails WHERE email_id = NEW.email;
 
-    -- Insert according to new role only if is_staff is TRUE
+    -- Only create new records if user is approved as staff
     IF NEW.is_staff = TRUE THEN
       IF NEW.role = 'hr' THEN
         INSERT INTO accounts_hr(email_id, fullname) VALUES (NEW.email, 'Default Name');
@@ -21,25 +24,43 @@ BEGIN
       ELSIF NEW.role = 'manager' THEN
         INSERT INTO accounts_manager(email_id, fullname) VALUES (NEW.email, 'Default Name');
       ELSIF NEW.role = 'employee' THEN
+        -- Create entry in employee table
         INSERT INTO accounts_employee(email_id, fullname) VALUES (NEW.email, 'Default Name');
+        -- Create corresponding employee details with default empty strings
+        INSERT INTO accounts_employeedetails(
+            email_id,
+            father_name, father_contact,
+            mother_name, mother_contact,
+            wife_name,
+            home_address,
+            total_siblings, brothers, sisters,
+            total_children,
+            bank_name, branch, pf_no, pf_uan, ifsc
+        )
+        VALUES (
+            NEW.email,
+            '', '', '', '', '', '', 0, 0, 0, 0, '', '', '', '', ''
+        );
       ELSIF NEW.role = 'admin' THEN
         INSERT INTO accounts_admin(email_id, fullname) VALUES (NEW.email, 'Default Name');
       END IF;
     END IF;
 
+  -- Handle DELETE (user rejected)
   ELSIF TG_OP = 'DELETE' THEN
-    -- On user deletion, remove role records
     DELETE FROM accounts_hr WHERE email_id = OLD.email;
     DELETE FROM accounts_ceo WHERE email_id = OLD.email;
     DELETE FROM accounts_manager WHERE email_id = OLD.email;
     DELETE FROM accounts_employee WHERE email_id = OLD.email;
     DELETE FROM accounts_admin WHERE email_id = OLD.email;
+    DELETE FROM accounts_employeedetails WHERE email_id = OLD.email;
   END IF;
 
   RETURN NEW;
 END;
 $$ LANGUAGE plpgsql;
 
+-- Recreate the trigger
 DROP TRIGGER IF EXISTS trg_manage_role_tables ON accounts_user;
 
 CREATE TRIGGER trg_manage_role_tables
