@@ -23,11 +23,11 @@ from django.core.mail import send_mail, EmailMessage
 from django.contrib.sites.shortcuts import get_current_site
 from django.template.loader import render_to_string
 from django.db.models import Q
-from django.db import models
+from django.db import models, IntegrityError
 from django.shortcuts import get_object_or_404
 from django.http.multipartparser import MultiPartParser, MultiPartParserError
 
-from rest_framework import status, viewsets, generics
+from rest_framework import status, viewsets, generics, filters
 from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework.permissions import AllowAny
@@ -37,14 +37,14 @@ from rest_framework.decorators import api_view, permission_classes
 from .models import (
     User, CEO, HR, Manager, Department, Employee, Attendance, Admin,
     Leave, Payroll, TaskTable, Project, Notice, Report,
-    Document, Award, Ticket, EmployeeDetails, ReleavedEmployee
+    Document, Award, Ticket, EmployeeDetails, ReleavedEmployee, Holiday
 )
 
 # Serializers
 from .serializers import (
     UserSerializer, CEOSerializer, HRSerializer, ManagerSerializer, DepartmentSerializer,
     EmployeeSerializer, SuperUserCreateSerializer, UserRegistrationSerializer,
-    AdminSerializer, ReportSerializer, RegisterSerializer, DocumentSerializer, AwardSerializer, TicketSerializer, EmployeeDetailsSerializer
+    AdminSerializer, ReportSerializer, RegisterSerializer, DocumentSerializer, AwardSerializer, TicketSerializer, EmployeeDetailsSerializer, HolidaySerializer
 )
 
 # Ensure User model points to custom one
@@ -2242,3 +2242,52 @@ def bonafide_certificate(request):
         "employee": employee.fullname,
         "file_url": file_url
     }, status=status.HTTP_200_OK)
+
+
+
+class HolidayViewSet(viewsets.ModelViewSet):
+    queryset = Holiday.objects.all()
+    serializer_class = HolidaySerializer
+
+    def create(self, request, *args, **kwargs):
+        data = request.data
+        many = isinstance(data, list)
+        created_objects = []
+
+        if many:
+            for item in data:
+                try:
+                    holiday, created = Holiday.objects.get_or_create(
+                        date=item.get("date"),
+                        country=item.get("country"),
+                        defaults={
+                            "name": item.get("name"),
+                            "type": item.get("type"),
+                            "year": item.get("year"),
+                            "month": item.get("month"),
+                            "weekday": item.get("weekday")
+                        }
+                    )
+                    if created:
+                        created_objects.append(HolidaySerializer(holiday).data)
+                except IntegrityError:
+                    continue  # skip duplicates
+            return Response(created_objects, status=status.HTTP_201_CREATED)
+        else:
+            # single entry
+            try:
+                holiday, created = Holiday.objects.get_or_create(
+                    date=data.get("date"),
+                    country=data.get("country"),
+                    defaults={
+                        "name": data.get("name"),
+                        "type": data.get("type"),
+                        "year": data.get("year"),
+                        "month": data.get("month"),
+                        "weekday": data.get("weekday")
+                    }
+                )
+                serializer = HolidaySerializer(holiday)
+                return Response(serializer.data, status=status.HTTP_201_CREATED)
+            except IntegrityError:
+                return Response({"detail": "Holiday already exists"}, status=status.HTTP_400_BAD_REQUEST)

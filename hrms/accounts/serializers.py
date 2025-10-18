@@ -1,5 +1,5 @@
 from rest_framework import serializers
-from .models import User, CEO, HR, Manager, Employee, Admin, Leave, Attendance, Report, Project, Notice, Document, Award, Department, Ticket, EmployeeDetails
+from .models import User, CEO, HR, Manager, Employee, Admin, Leave, Attendance, Report, Project, Notice, Document, Award, Department, Ticket, EmployeeDetails, Holiday
 
 class UserRegistrationSerializer(serializers.ModelSerializer):
     password = serializers.CharField(write_only=True, min_length=8)
@@ -188,3 +188,9 @@ class TicketSerializer(serializers.ModelSerializer):
                 if data.get('closed_to') != self.instance.assigned_by:
                     raise serializers.ValidationError("closed_to must be the assigned_by user (User A).")
         return data
+
+
+class HolidaySerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Holiday
+        fields = ['year', 'month', 'country', 'date', 'name', 'type', 'weekday']

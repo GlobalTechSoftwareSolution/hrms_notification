@@ -1,6 +1,8 @@
 from django.db import models
 from django.contrib.auth.models import AbstractBaseUser, PermissionsMixin, BaseUserManager
 from django.utils import timezone
+from datetime import datetime
+
 
 # ------------------- USER -------------------
 class UserManager(BaseUserManager):
@@ -369,8 +371,10 @@ class Ticket(models.Model):
     def __str__(self):
         return f"{self.subject} - {self.status}"
 
+
 class EmployeeDetails(models.Model):
     email = models.ForeignKey(User, on_delete=models.CASCADE, to_field='email', related_name='employee_details')
+    account_number = models.CharField(max_length=20, unique=True, null=True, blank=True)  # Added account_number
     father_name = models.CharField(max_length=100)
     father_contact = models.CharField(max_length=20)
     mother_name = models.CharField(max_length=100)
@@ -388,7 +392,7 @@ class EmployeeDetails(models.Model):
     ifsc = models.CharField(max_length=20)
     
     def __str__(self):
-        return f"Employee Details of {self.email.email}"
+        return f"Employee Details of {self.email.email} ({self.account_number})"
     
 
 class ReleavedEmployee(models.Model):
@@ -406,4 +410,28 @@ class ReleavedEmployee(models.Model):
 
     def __str__(self):
         return self.email  # ✅ Only shows email (not with role)
+
+class Holiday(models.Model):
+    name = models.CharField(max_length=255)
+    date = models.DateField()
+    type = models.CharField(max_length=100)
+    country = models.CharField(max_length=100, default="India")
+    year = models.PositiveIntegerField()
+    month = models.PositiveIntegerField()
+    weekday = models.CharField(max_length=10, blank=True)
+
+    class Meta:
+        unique_together = ('date', 'country')
+        ordering = ['date']
+
+    def save(self, *args, **kwargs):
+        # Convert string to date if necessary
+        if isinstance(self.date, str):
+            self.date = datetime.strptime(self.date, '%Y-%m-%d').date()
+        # Auto-set the weekday
+        self.weekday = self.date.strftime('%A')
+        super().save(*args, **kwargs)
+
+    def __str__(self):
+        return f"{self.name} ({self.date} - {self.weekday})"
 
