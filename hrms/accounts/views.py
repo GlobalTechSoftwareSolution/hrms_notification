@@ -37,14 +37,15 @@ from rest_framework.decorators import api_view, permission_classes
 from .models import (
     User, CEO, HR, Manager, Department, Employee, Attendance, Admin,
     Leave, Payroll, TaskTable, Project, Notice, Report,
-    Document, Award, Ticket, EmployeeDetails, ReleavedEmployee, Holiday, AbsentEmployeeDetails
+    Document, Award, Ticket, EmployeeDetails, ReleavedEmployee, Holiday, AbsentEmployeeDetails, AppliedJobs, 
+    JobPosting
 )
 
 # Serializers
 from .serializers import (
     UserSerializer, CEOSerializer, HRSerializer, ManagerSerializer, DepartmentSerializer,
     EmployeeSerializer, SuperUserCreateSerializer, UserRegistrationSerializer,
-    AdminSerializer, ReportSerializer, RegisterSerializer, DocumentSerializer, AwardSerializer, TicketSerializer, EmployeeDetailsSerializer, HolidaySerializer, AbsentEmployeeDetailsSerializer
+    AdminSerializer, ReportSerializer, RegisterSerializer, DocumentSerializer, AwardSerializer, TicketSerializer, EmployeeDetailsSerializer, HolidaySerializer, AbsentEmployeeDetailsSerializer, CareerSerializer, JobPostingSerializer
 )
 
 # Ensure User model points to custom one
@@ -2344,3 +2345,15 @@ def list_absent_employees(request):
     absent_employees = AbsentEmployeeDetails.objects.all()
     serializer = AbsentEmployeeDetailsSerializer(absent_employees, many=True)
     return Response(serializer.data)
+
+
+class CareerViewSet(viewsets.ModelViewSet):
+    queryset = AppliedJobs.objects.all()
+    serializer_class = CareerSerializer
+    lookup_field = 'email'
+    
+
+class JobPostingViewSet(viewsets.ModelViewSet):
+    queryset = JobPosting.objects.all()
+    serializer_class = JobPostingSerializer
+    lookup_field = 'id'

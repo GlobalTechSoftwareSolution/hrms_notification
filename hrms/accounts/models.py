@@ -471,3 +471,70 @@ class AbsentEmployeeDetails(models.Model):
 
     def __str__(self):
         return f"{self.fullname or self.email} - {self.date}"
+
+
+class AppliedJobs(models.Model):
+    GENDER_CHOICES = [
+        ('Male', 'Male'),
+        ('Female', 'Female'),
+        ('Other', 'Other'),
+    ]
+    
+    AVAILABILITY_CHOICES = [
+        ('Yes', 'Yes'),
+        ('No', 'No'),
+    ]
+    
+    email = models.EmailField(primary_key=True, db_column='email_id')  # Field name is 'email', DB column is 'email_id'
+    full_name = models.CharField(max_length=255)
+    gender = models.CharField(max_length=10, choices=GENDER_CHOICES)
+    phone_number = models.CharField(max_length=20)
+    course = models.CharField(max_length=255, blank=True, null=True)
+    resume = models.FileField(upload_to='resumes/', null=True, blank=True)
+    available_for_training = models.CharField(max_length=3, choices=AVAILABILITY_CHOICES)
+    work_experience = models.TextField(blank=True, null=True)
+    specialization = models.CharField(max_length=255, blank=True, null=True)
+    hired = models.BooleanField(default=False)  # Boolean field, default not hired
+    report = models.TextField(blank=True, null=True)  # Optional text field for report
+    
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        db_table = 'accounts_appliedjobs'
+
+    def __str__(self):
+        return f"{self.full_name} ({self.email})"
+
+
+class JobPosting(models.Model):
+    JOB_TYPE_CHOICES = [
+        ('Full-time', 'Full-time'),
+        ('Part-time', 'Part-time'),
+        ('Internship', 'Internship'),
+        ('Contract', 'Contract'),
+    ]
+
+    id = models.AutoField(primary_key=True)
+    title = models.CharField(max_length=255)
+    department = models.CharField(max_length=255)
+    description = models.TextField()    
+    responsibilities = models.JSONField(default=list, blank=True)
+    requirements = models.JSONField(default=list, blank=True)
+    benefits = models.JSONField(default=list, blank=True)
+    skills = models.JSONField(default=list, blank=True)
+    location = models.CharField(max_length=255)
+    type = models.CharField(max_length=20, choices=JOB_TYPE_CHOICES, default='Full-time')
+    experience = models.CharField(max_length=50)
+    salary = models.CharField(max_length=50, blank=True, null=True)
+    apply_link = models.URLField(max_length=500, blank=True, null=True)
+    posted_date = models.DateField()
+    category = models.CharField(max_length=255)
+    education = models.CharField(max_length=255)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        db_table = 'accounts_job_postings'
+
+    def __str__(self):
+        return f"{self.title} ({self.department})"
