@@ -1,7 +1,8 @@
 from django.db import models
 from django.contrib.auth.models import AbstractBaseUser, PermissionsMixin, BaseUserManager
 from django.utils import timezone
-from datetime import datetime
+from django.core.exceptions import ValidationError
+from datetime import datetime, time
 
 
 # ------------------- USER -------------------
@@ -219,19 +220,33 @@ class Attendance(models.Model):
     longitude = models.FloatField(null=True, blank=True)
     location_verified = models.BooleanField(default=False)
 
+    CHECK_IN_DEADLINE = time(10, 45)  # 10:45 AM
+
     def save(self, *args, **kwargs):
+        # Fill fullname and department
         if self.email:
             try:
                 employee = self.email.employee
                 self.fullname = employee.fullname
                 self.department = employee.department
-            except Exception:
+            except Employee.DoesNotExist:
                 pass
+
+        # Check-in constraint
+        if self.check_in:
+            if self.check_in > self.CHECK_IN_DEADLINE:
+                # Mark employee as absent
+                AbsentEmployeeDetails.objects.get_or_create(
+                    email=self.email,
+                    date=self.date
+                )
+                # Prevent saving late check-in
+                raise ValidationError(f"Check-in after {self.CHECK_IN_DEADLINE.strftime('%H:%M')} is not allowed.")
+
         super().save(*args, **kwargs)
 
     def __str__(self):
         return f"{self.fullname or self.email} - {self.date}"
-
 
 class Leave(models.Model):
     id = models.AutoField(primary_key=True)
@@ -435,3 +450,24 @@ class Holiday(models.Model):
     def __str__(self):
         return f"{self.name} ({self.date} - {self.weekday})"
 
+class AbsentEmployeeDetails(models.Model):
+    id = models.AutoField(primary_key=True)
+    email = models.ForeignKey('User', on_delete=models.CASCADE, to_field='email')
+    fullname = models.CharField(max_length=255, null=True, blank=True)
+    department = models.CharField(max_length=100, null=True, blank=True)
+    date = models.DateField(default=timezone.localdate)
+
+    def save(self, *args, **kwargs):
+        # Automatically populate fullname and department from Employee
+        if self.email:
+            try:
+                employee = self.email.employee  # Access related Employee
+                self.fullname = employee.fullname
+                self.department = employee.department
+            except Exception:
+                # Just in case Employee object doesn't exist
+                pass
+        super().save(*args, **kwargs)
+
+    def __str__(self):
+        return f"{self.fullname or self.email} - {self.date}"

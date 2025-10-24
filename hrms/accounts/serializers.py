@@ -1,5 +1,5 @@
 from rest_framework import serializers
-from .models import User, CEO, HR, Manager, Employee, Admin, Leave, Attendance, Report, Project, Notice, Document, Award, Department, Ticket, EmployeeDetails, Holiday
+from .models import User, CEO, HR, Manager, Employee, Admin, Leave, Attendance, Report, Project, Notice, Document, Award, Department, Ticket, EmployeeDetails, Holiday, AbsentEmployeeDetails
 
 class UserRegistrationSerializer(serializers.ModelSerializer):
     password = serializers.CharField(write_only=True, min_length=8)
@@ -194,3 +194,9 @@ class HolidaySerializer(serializers.ModelSerializer):
     class Meta:
         model = Holiday
         fields = ['year', 'month', 'country', 'date', 'name', 'type', 'weekday']
+
+
+class AbsentEmployeeDetailsSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = AbsentEmployeeDetails
+        fields = ['email', 'fullname', 'department', 'date']

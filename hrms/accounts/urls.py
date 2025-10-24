@@ -13,7 +13,7 @@ from accounts.views import (
     create_document, list_documents, get_document, update_document, delete_document,
     create_award, list_awards, get_award, update_award, delete_award,
     attendance_page, mark_attendance_view, RequestPasswordResetView, PasswordResetConfirmView,
-    appointment_letter, offer_letter, releaving_letter, bonafide_certificate, TicketViewSet, HolidayViewSet
+    appointment_letter, offer_letter, releaving_letter, bonafide_certificate, TicketViewSet, HolidayViewSet, list_absent_employees
 )
 
 
@@ -109,4 +109,5 @@ urlpatterns = [
 
     path('holidays/', HolidayViewSet.as_view({'get': 'list', 'post': 'create'}), name='holiday-list'),
     path('holidays/<int:pk>/', HolidayViewSet.as_view({'get': 'retrieve', 'patch': 'partial_update', 'delete': 'destroy'}), name='holiday-detail'),
+    path('attendance/', list_absent_employees, name='list-absent-employees'),
 ]

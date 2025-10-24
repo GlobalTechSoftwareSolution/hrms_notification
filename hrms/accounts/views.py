@@ -2,7 +2,7 @@ import os, json, pytz, face_recognition, tempfile, requests, boto3
 
 from io import BytesIO
 from pathlib import Path
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, time
 from geopy.distance import geodesic
 from xhtml2pdf import pisa
 from threading import Thread
@@ -37,14 +37,14 @@ from rest_framework.decorators import api_view, permission_classes
 from .models import (
     User, CEO, HR, Manager, Department, Employee, Attendance, Admin,
     Leave, Payroll, TaskTable, Project, Notice, Report,
-    Document, Award, Ticket, EmployeeDetails, ReleavedEmployee, Holiday
+    Document, Award, Ticket, EmployeeDetails, ReleavedEmployee, Holiday, AbsentEmployeeDetails
 )
 
 # Serializers
 from .serializers import (
     UserSerializer, CEOSerializer, HRSerializer, ManagerSerializer, DepartmentSerializer,
     EmployeeSerializer, SuperUserCreateSerializer, UserRegistrationSerializer,
-    AdminSerializer, ReportSerializer, RegisterSerializer, DocumentSerializer, AwardSerializer, TicketSerializer, EmployeeDetailsSerializer, HolidaySerializer
+    AdminSerializer, ReportSerializer, RegisterSerializer, DocumentSerializer, AwardSerializer, TicketSerializer, EmployeeDetailsSerializer, HolidaySerializer, AbsentEmployeeDetailsSerializer
 )
 
 # Ensure User model points to custom one
@@ -164,12 +164,13 @@ def is_email_exists(email):
     print(f"[is_email_exists] Email {email} exists: {exists}")
     return exists
 
-
+CHECK_IN_DEADLINE = time(10, 45)  # 10:45 AM
 
 def mark_attendance_by_email(email_str, latitude=None, longitude=None):
     """
     Marks attendance for a user based on email and live location.
     Only works if user is within 100 meters of the office.
+    Automatically marks absent if no check-in before 10:45 AM.
     """
     if not is_email_exists(email_str):
         print(f"[mark_attendance_by_email] Email {email_str} not found. Attendance not marked.")
@@ -187,6 +188,7 @@ def mark_attendance_by_email(email_str, latitude=None, longitude=None):
 
     today = timezone.localdate()
     now = timezone.now().astimezone(IST)
+    current_time = now.time()
     print(f"[mark_attendance_by_email] Processing attendance for {email_str} on {today} at {now}")
 
     try:
@@ -195,10 +197,24 @@ def mark_attendance_by_email(email_str, latitude=None, longitude=None):
         print(f"[mark_attendance_by_email] User instance not found for {email_str}")
         return None
 
+    # ------------------- Check for existing attendance ------------------- #
+    attendance_exists = Attendance.objects.filter(email=user_instance, date=today).exists()
+
+    # ------------------- Automatically mark absent if past 10:45 and no check-in ------------------- #
+    if current_time > CHECK_IN_DEADLINE and not attendance_exists:
+        absent_entry, created = AbsentEmployeeDetails.objects.get_or_create(
+            email=user_instance,
+            date=today
+        )
+        if created:
+            print(f"[mark_attendance_by_email] {email_str} did not check in before 10:45 AM. Marked as absent.")
+        return None  # Do not allow late check-in
+
+    # ------------------- Existing Attendance Logic ------------------- #
     try:
         attendance = Attendance.objects.get(email=user_instance, date=today)
         if attendance.check_out is None:
-            attendance.check_out = now.time()
+            attendance.check_out = current_time
             attendance.save()
             print(f"[mark_attendance_by_email] Updated check_out for {email_str} at {now}")
     except Attendance.DoesNotExist:
@@ -206,7 +222,7 @@ def mark_attendance_by_email(email_str, latitude=None, longitude=None):
             attendance = Attendance.objects.create(
                 email=user_instance,
                 date=today,
-                check_in=now.time(),
+                check_in=current_time,
                 latitude=latitude,
                 longitude=longitude,
                 location_verified=True  # ✅ within 100m radius
@@ -2321,3 +2337,10 @@ class HolidayViewSet(viewsets.ModelViewSet):
                 return Response(serializer.data, status=status.HTTP_201_CREATED)
             except IntegrityError:
                 return Response({"detail": "Holiday already exists"}, status=status.HTTP_400_BAD_REQUEST)
+            
+
+@api_view(['GET'])
+def list_absent_employees(request):
+    absent_employees = AbsentEmployeeDetails.objects.all()
+    serializer = AbsentEmployeeDetailsSerializer(absent_employees, many=True)
+    return Response(serializer.data)
