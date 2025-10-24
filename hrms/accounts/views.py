@@ -366,7 +366,7 @@ class BaseUserViewSet(viewsets.ModelViewSet):
 
     def _update_employee_details(self, instance, data):
         details_fields = [
-            'father_name', 'father_contact', 'mother_name', 'mother_contact',
+            'account_number', 'father_name', 'father_contact', 'mother_name', 'mother_contact',
             'wife_name', 'home_address', 'total_siblings', 'brothers',
             'sisters', 'total_children', 'bank_name', 'branch', 'pf_no',
             'pf_uan', 'ifsc'
@@ -408,8 +408,25 @@ class BaseUserViewSet(viewsets.ModelViewSet):
         # Update main model fields
         for field, value in request.data.items():
             if hasattr(instance, field) and field != 'profile_picture':
-                setattr(instance, field, value)
-                updated = True
+                field_obj = instance._meta.get_field(field)
+                
+                # Handle ForeignKey fields
+                if field_obj.is_relation and isinstance(field_obj, models.ForeignKey):
+                    related_model = field_obj.remote_field.model
+
+                    try:
+                        # Assume value is an email or PK
+                        related_instance = related_model.objects.get(email=value)
+                        setattr(instance, field, related_instance)
+                        updated = True
+                    except related_model.DoesNotExist:
+                        return Response(
+                            {"error": f"{related_model.__name__} with email '{value}' does not exist"},
+                            status=400
+                        )
+                else:
+                    setattr(instance, field, value)
+                    updated = True
 
         if updated:
             instance.save()
@@ -419,6 +436,7 @@ class BaseUserViewSet(viewsets.ModelViewSet):
             self._update_employee_details(instance, request.data)
 
         return Response(self.get_serializer(instance).data, status=200)
+
 
     def update(self, request, *args, **kwargs):
         return self.partial_update(request, *args, **kwargs)
@@ -1857,28 +1875,30 @@ def appointment_letter(request):
     if not email:
         return Response({"error": "Email is required"}, status=status.HTTP_400_BAD_REQUEST)
 
-    # Fetch employee
-    employee = Employee.objects.filter(email=email).first()
+    # -------------------- Fetch Employee -------------------- #
+    employee = Employee.objects.filter(email__email=email).first()
     if not employee:
         return Response({"error": "Employee not found"}, status=status.HTTP_404_NOT_FOUND)
 
-    # Fetch corresponding User
-    try:
-        user = User.objects.get(email=employee.email)
-    except User.DoesNotExist:
-        return Response({"error": "User not found for this employee"}, status=status.HTTP_404_NOT_FOUND)
+    # -------------------- Get corresponding User (directly from OneToOneField) -------------------- #
+    user = employee.email  # Already a User instance
 
+    # -------------------- Dates & File Setup -------------------- #
     today = timezone.localtime().date()
     acceptance_deadline = today + timedelta(days=5)
     folder_name = email.split('@')[0].lower()
 
-    # -------------------- Render PDF -------------------- #
+    # -------------------- Render Context -------------------- #
     context = {
         'employee_name': employee.fullname,
         'designation': employee.designation or 'Employee',
-        'joining_date': employee.date_joined.strftime('%d-%m-%Y'),
+        'joining_date': (
+            employee.date_joined.strftime('%d-%m-%Y') if employee.date_joined else today.strftime('%d-%m-%Y')
+        ),
         'department': employee.department or 'N/A',
-        'reporting_manager': employee.reports_to.email if employee.reports_to else 'N/A',
+        'reporting_manager': (
+            employee.reports_to.email if employee.reports_to else 'N/A'
+        ),
         'logo_url': 'https://www.globaltechsoftwaresolutions.com/_next/image?url=%2Flogo%2FGlobal.jpg&w=64&q=75',
         'company_name': 'Global Tech Software Solutions',
         'salary': 'Confidential',
@@ -1886,20 +1906,20 @@ def appointment_letter(request):
         'acceptance_deadline': acceptance_deadline.strftime('%d-%m-%Y'),
     }
 
+    # -------------------- Render HTML to PDF -------------------- #
     html = render_to_string('letters/appointment_letter.html', context)
 
-    # PDF for MinIO
     pdf_minio = BytesIO()
+    pdf_email = BytesIO()
+
     pisa_status_minio = pisa.CreatePDF(html, dest=pdf_minio, encoding='UTF-8')
     if pisa_status_minio.err:
-        return Response({"error": "PDF generation failed"}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+        return Response({"error": "PDF generation failed (MinIO)"}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
     pdf_minio.seek(0)
 
-    # PDF for email (separate BytesIO)
-    pdf_email = BytesIO()
     pisa_status_email = pisa.CreatePDF(html, dest=pdf_email, encoding='UTF-8')
     if pisa_status_email.err:
-        return Response({"error": "PDF generation for email failed"}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+        return Response({"error": "PDF generation failed (Email)"}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
     pdf_email.seek(0)
 
     # -------------------- Upload to MinIO -------------------- #
@@ -1913,15 +1933,19 @@ def appointment_letter(request):
             aws_access_key_id='admin',
             aws_secret_access_key='admin12345'
         )
-        bucket_name = 'hrms-media'
 
-        # Upload or overwrite existing file
-        s3.upload_fileobj(pdf_minio, bucket_name, object_name, ExtraArgs={'ContentType': 'application/pdf'})
+        bucket_name = 'hrms-media'
+        s3.upload_fileobj(
+            pdf_minio,
+            bucket_name,
+            object_name,
+            ExtraArgs={'ContentType': 'application/pdf'}
+        )
 
         file_url = f"https://minio.globaltechsoftwaresolutions.cloud:9000/{bucket_name}/{object_name}"
 
-        # -------------------- Save URL to DB -------------------- #
-        document, created = Document.objects.get_or_create(email=user)
+        # Save the MinIO file URL to Document model
+        document, _ = Document.objects.get_or_create(email=user)
         document.appointment_letter = file_url
         document.save()
 
@@ -1936,7 +1960,7 @@ def appointment_letter(request):
         mail = EmailMessage(
             subject="Appointment Letter - Global Tech Software Solutions",
             body=f"Dear {employee.fullname},\n\nPlease find attached your appointment letter.\n\nBest Regards,\nGlobal Tech HR",
-            to=[employee.email]
+            to=[email]
         )
         mail.attach(filename, pdf_content, 'application/pdf')
         mail.send(fail_silently=False)
@@ -1944,6 +1968,7 @@ def appointment_letter(request):
     except Exception as e:
         return Response({"error": f"Failed to send email: {str(e)}"}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
+    # -------------------- Success -------------------- #
     return Response({
         "message": "Appointment letter generated, uploaded to MinIO, saved in DB, and emailed successfully.",
         "employee": employee.fullname,
@@ -1957,26 +1982,23 @@ def offer_letter(request):
     if not email:
         return Response({"error": "Email is required"}, status=status.HTTP_400_BAD_REQUEST)
 
-    # Fetch employee
-    employee = Employee.objects.filter(email=email).first()
+    # -------------------- Fetch Employee -------------------- #
+    employee = Employee.objects.filter(email__email=email).first()
     if not employee:
         return Response({"error": "Employee not found"}, status=status.HTTP_404_NOT_FOUND)
 
-    # Fetch corresponding User
-    try:
-        user = User.objects.get(email=employee.email)
-    except User.DoesNotExist:
-        return Response({"error": "User not found for this employee"}, status=status.HTTP_404_NOT_FOUND)
+    # -------------------- Fetch corresponding User -------------------- #
+    user = employee.email  # Already a User instance due to OneToOneField
 
+    # -------------------- Prepare Context for Offer Letter -------------------- #
     today = timezone.now().date()
     acceptance_deadline = today + timedelta(days=5)
     folder_name = email.split('@')[0].lower()
 
-    # -------------------- Render PDF -------------------- #
     context = {
         'candidate_name': employee.fullname,
         'designation': employee.designation or 'Employee',
-        'location': getattr(employee, 'location', None) or 'Bangalore',
+        'location': employee.work_location or 'Bangalore',
         'joining_date': employee.date_joined or today,
         'today_date': today,
         'probation_months': 6,
@@ -1985,20 +2007,21 @@ def offer_letter(request):
         'company_name': 'Global Tech Software Solutions',
     }
 
+    # -------------------- Render HTML to PDF -------------------- #
     html = render_to_string('letters/offer_letter.html', context)
 
-    # PDF for MinIO
+    # Create in-memory PDFs
     pdf_minio = BytesIO()
+    pdf_email = BytesIO()
+
     pisa_status_minio = pisa.CreatePDF(html, dest=pdf_minio, encoding='UTF-8')
     if pisa_status_minio.err:
-        return Response({"error": "PDF generation failed"}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+        return Response({"error": "PDF generation failed (MinIO)"}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
     pdf_minio.seek(0)
 
-    # PDF for email
-    pdf_email = BytesIO()
     pisa_status_email = pisa.CreatePDF(html, dest=pdf_email, encoding='UTF-8')
     if pisa_status_email.err:
-        return Response({"error": "PDF generation for email failed"}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+        return Response({"error": "PDF generation failed (Email)"}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
     pdf_email.seek(0)
 
     # -------------------- Upload to MinIO -------------------- #
@@ -2012,20 +2035,26 @@ def offer_letter(request):
             aws_access_key_id='admin',
             aws_secret_access_key='admin12345'
         )
+
         bucket_name = 'hrms-media'
-        s3.upload_fileobj(pdf_minio, bucket_name, object_name, ExtraArgs={'ContentType': 'application/pdf'})
+        s3.upload_fileobj(
+            pdf_minio,
+            bucket_name,
+            object_name,
+            ExtraArgs={'ContentType': 'application/pdf'}
+        )
 
         file_url = f"https://minio.globaltechsoftwaresolutions.cloud:9000/{bucket_name}/{object_name}"
 
-        # Save URL to DB
-        document, created = Document.objects.get_or_create(email=user)
+        # Save the MinIO file URL to Document model
+        document, _ = Document.objects.get_or_create(email=user)
         document.offer_letter = file_url
         document.save()
 
     except Exception as e:
         return Response({"error": f"MinIO upload or DB save failed: {str(e)}"}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
-    # -------------------- Send Email -------------------- #
+    # -------------------- Send Offer Letter via Email -------------------- #
     try:
         pdf_email.seek(0)
         pdf_content = pdf_email.read()
@@ -2033,7 +2062,7 @@ def offer_letter(request):
         mail = EmailMessage(
             subject="Offer Letter - Global Tech Software Solutions",
             body=f"Dear {employee.fullname},\n\nPlease find attached your offer letter.\n\nBest Regards,\nGlobal Tech HR",
-            to=[employee.email]
+            to=[email]
         )
         mail.attach(filename, pdf_content, 'application/pdf')
         mail.send(fail_silently=False)
@@ -2041,6 +2070,7 @@ def offer_letter(request):
     except Exception as e:
         return Response({"error": f"Failed to send email: {str(e)}"}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
+    # -------------------- Success Response -------------------- #
     return Response({
         "message": "Offer letter generated, uploaded to MinIO, saved in DB, and emailed successfully.",
         "employee": employee.fullname,
@@ -2054,16 +2084,13 @@ def releaving_letter(request):
     if not email:
         return Response({"error": "Email is required"}, status=status.HTTP_400_BAD_REQUEST)
 
-    # Fetch employee
-    employee = Employee.objects.filter(email=email).first()
+    # -------------------- Fetch Employee -------------------- #
+    employee = Employee.objects.filter(email__email=email).first()
     if not employee:
         return Response({"error": "Employee not found"}, status=status.HTTP_404_NOT_FOUND)
 
-    # Fetch corresponding User
-    try:
-        user = User.objects.get(email=employee.email)
-    except User.DoesNotExist:
-        return Response({"error": "User not found for this employee"}, status=status.HTTP_404_NOT_FOUND)
+    # -------------------- Fetch corresponding User -------------------- #
+    user = employee.email  # Already a User instance
 
     today = timezone.now().date()
     last_working_day = getattr(employee, 'last_working_date', today)
@@ -2072,7 +2099,7 @@ def releaving_letter(request):
     # -------------------- Render PDF -------------------- #
     context = {
         'employee_name': employee.fullname,
-        'employee_id': getattr(employee, 'employee_id', '') or getattr(employee, 'id', ''),
+        'employee_id': getattr(employee, 'emp_id', '') or getattr(employee, 'id', ''),
         'designation': employee.designation or 'Employee',
         'department': employee.department or '',
         'date_of_joining': employee.date_joined or today,
@@ -2085,18 +2112,16 @@ def releaving_letter(request):
 
     html = render_to_string('letters/releaving_letter.html', context)
 
-    # PDF for MinIO
+    # -------------------- Generate PDFs -------------------- #
     pdf_minio = BytesIO()
-    pisa_status_minio = pisa.CreatePDF(html, dest=pdf_minio, encoding='UTF-8')
-    if pisa_status_minio.err:
-        return Response({"error": "PDF generation failed"}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+    pdf_email = BytesIO()
+
+    if pisa.CreatePDF(html, dest=pdf_minio, encoding='UTF-8').err:
+        return Response({"error": "PDF generation failed (MinIO)"}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
     pdf_minio.seek(0)
 
-    # PDF for email
-    pdf_email = BytesIO()
-    pisa_status_email = pisa.CreatePDF(html, dest=pdf_email, encoding='UTF-8')
-    if pisa_status_email.err:
-        return Response({"error": "PDF generation for email failed"}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+    if pisa.CreatePDF(html, dest=pdf_email, encoding='UTF-8').err:
+        return Response({"error": "PDF generation failed (Email)"}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
     pdf_email.seek(0)
 
     # -------------------- Upload to MinIO -------------------- #
@@ -2115,8 +2140,8 @@ def releaving_letter(request):
 
         file_url = f"https://minio.globaltechsoftwaresolutions.cloud:9000/{bucket_name}/{object_name}"
 
-        # Save URL to DB
-        document, created = Document.objects.get_or_create(email=user)
+        # Save URL to Document
+        document, _ = Document.objects.get_or_create(email=user)
         document.releaving_letter = file_url
         document.save()
 
@@ -2131,7 +2156,7 @@ def releaving_letter(request):
         mail = EmailMessage(
             subject="Relieving Letter - Global Tech Software Solutions",
             body=f"Dear {employee.fullname},\n\nPlease find attached your relieving letter.\n\nBest Regards,\nGlobal Tech HR",
-            to=[employee.email]
+            to=[email]
         )
         mail.attach(filename, pdf_content, 'application/pdf')
         mail.send(fail_silently=False)
@@ -2152,25 +2177,23 @@ def bonafide_certificate(request):
     if not email:
         return Response({"error": "Email is required"}, status=status.HTTP_400_BAD_REQUEST)
 
-    # Fetch employee
-    employee = Employee.objects.filter(email=email).first()
+    # -------------------- Fetch Employee -------------------- #
+    # Since Employee.email is a OneToOneField to User.email, use double lookup
+    employee = Employee.objects.filter(email__email=email).first()
     if not employee:
         return Response({"error": "Employee not found"}, status=status.HTTP_404_NOT_FOUND)
 
-    # Fetch corresponding User
-    try:
-        user = User.objects.get(email=employee.email)
-    except User.DoesNotExist:
-        return Response({"error": "User not found for this employee"}, status=status.HTTP_404_NOT_FOUND)
+    # -------------------- Get corresponding User instance -------------------- #
+    user = employee.email  # This is already a User object due to OneToOneField
 
-    today = timezone.now().date()
+    # -------------------- Prepare Context -------------------- #
+    today = timezone.localtime().date()
     last_working_day = today
     folder_name = email.split('@')[0].lower()
 
-    # -------------------- Render PDF -------------------- #
     context = {
         'candidate_name': employee.fullname,
-        'email': employee.email,
+        'email': user.email,
         'designation': employee.designation or "Employee",
         'department': employee.department or "N/A",
         'date_of_joining': employee.date_joined.strftime("%d-%m-%Y") if employee.date_joined else "N/A",
@@ -2181,20 +2204,21 @@ def bonafide_certificate(request):
         'logo_url': 'https://www.globaltechsoftwaresolutions.com/_next/image?url=%2Flogo%2FGlobal.jpg&w=64&q=75'
     }
 
+    # -------------------- Render HTML to PDF -------------------- #
     html = render_to_string('letters/bonafide_certificate.html', context)
 
-    # PDF for MinIO
+    # Create in-memory PDFs
     pdf_minio = BytesIO()
+    pdf_email = BytesIO()
+
     pisa_status_minio = pisa.CreatePDF(html, dest=pdf_minio, encoding='UTF-8')
     if pisa_status_minio.err:
-        return Response({"error": "PDF generation failed"}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+        return Response({"error": "PDF generation failed (MinIO)"}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
     pdf_minio.seek(0)
 
-    # PDF for email
-    pdf_email = BytesIO()
     pisa_status_email = pisa.CreatePDF(html, dest=pdf_email, encoding='UTF-8')
     if pisa_status_email.err:
-        return Response({"error": "PDF generation for email failed"}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+        return Response({"error": "PDF generation failed (Email)"}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
     pdf_email.seek(0)
 
     # -------------------- Upload to MinIO -------------------- #
@@ -2208,13 +2232,19 @@ def bonafide_certificate(request):
             aws_access_key_id='admin',
             aws_secret_access_key='admin12345'
         )
+
         bucket_name = 'hrms-media'
-        s3.upload_fileobj(pdf_minio, bucket_name, object_name, ExtraArgs={'ContentType': 'application/pdf'})
+        s3.upload_fileobj(
+            pdf_minio,
+            bucket_name,
+            object_name,
+            ExtraArgs={'ContentType': 'application/pdf'}
+        )
 
         file_url = f"https://minio.globaltechsoftwaresolutions.cloud:9000/{bucket_name}/{object_name}"
 
         # Save URL to DB
-        document, created = Document.objects.get_or_create(email=user)
+        document, _ = Document.objects.get_or_create(email=user)
         document.bonafide_crt = file_url
         document.save()
 
@@ -2229,7 +2259,7 @@ def bonafide_certificate(request):
         mail = EmailMessage(
             subject="Bonafide Certificate - Global Tech Software Solutions",
             body=f"Dear {employee.fullname},\n\nPlease find attached your Bonafide Certificate.\n\nBest Regards,\nGlobal Tech HR",
-            to=[employee.email]
+            to=[user.email]
         )
         mail.attach(filename, pdf_content, 'application/pdf')
         mail.send(fail_silently=False)
@@ -2237,12 +2267,12 @@ def bonafide_certificate(request):
     except Exception as e:
         return Response({"error": f"Failed to send email: {str(e)}"}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
+    # -------------------- Success Response -------------------- #
     return Response({
         "message": "Bonafide certificate generated, uploaded to MinIO, saved in DB, and emailed successfully.",
         "employee": employee.fullname,
         "file_url": file_url
     }, status=status.HTTP_200_OK)
-
 
 
 class HolidayViewSet(viewsets.ModelViewSet):

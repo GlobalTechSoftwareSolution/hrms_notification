@@ -38,13 +38,13 @@ INSTALLED_APPS = [
     'django.contrib.staticfiles',
     'rest_framework',
     'corsheaders',
-    'accounts',
-    'storages',
     'channels',
-    'chat',
+    'accounts',
+    # 'chat',
+    'storages',
 ]
 
-ASGI_APPLICATION = 'hrms.asgi.application'
+ASGI_APPLICATION = "hrms.asgi.application"
 
 
 # Redis channel layer
@@ -223,3 +223,5 @@ MINIO_STORAGE = {
 }
 BASE_BUCKET_URL = "https://minio.globaltechsoftwaresolutions.cloud:9000/hrms-media/"
 
+LOGIN_URL = '/login/'        # or whatever your login route is
+LOGIN_REDIRECT_URL = '/chat/'  # redirect here after successful login
