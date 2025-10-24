@@ -111,8 +111,8 @@ urlpatterns = [
     path('holidays/<int:pk>/', HolidayViewSet.as_view({'get': 'retrieve', 'patch': 'partial_update', 'delete': 'destroy'}), name='holiday-detail'),
     path('attendance/', list_absent_employees, name='list-absent-employees'),
 
-    path('careers/', CareerViewSet.as_view({'get': 'list', 'post': 'create'}), name='career-list'), 
-    path('careers/<str:email>/', CareerViewSet.as_view({'get': 'retrieve', 'patch': 'partial_update', 'delete': 'destroy'}), name='career-detail'),
-    path('jobs/', JobPostingViewSet.as_view({'get': 'list', 'post': 'create'}), name='job-list'),
-    path('jobs/<int:id>/', JobPostingViewSet.as_view({'get': 'retrieve', 'patch': 'partial_update', 'delete': 'destroy'}), name='job-detail'),
+    path('applied_jobs/', CareerViewSet.as_view({'get': 'list', 'post': 'create'}), name='career-list'), 
+    path('applied_jobs/<str:email>/', CareerViewSet.as_view({'get': 'retrieve', 'patch': 'partial_update', 'delete': 'destroy'}), name='career-detail'),
+    path('careers/', JobPostingViewSet.as_view({'get': 'list', 'post': 'create'}), name='job-list'),
+    path('careers/<int:id>/', JobPostingViewSet.as_view({'get': 'retrieve', 'patch': 'partial_update', 'delete': 'destroy'}), name='job-detail'),
 ]
