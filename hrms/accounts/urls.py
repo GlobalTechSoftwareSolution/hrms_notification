@@ -9,7 +9,7 @@ from accounts.views import (
     list_reports, create_report, update_report, delete_report,
     list_projects, create_project, get_project, update_project, delete_project,
     list_notices, create_notice, detail_notice, update_notice, delete_notice,
-    get_employee_by_email, get_tasks_by_assigned_by,
+    get_employee_by_email, get_tasks_by_assigned_by, get_attendance, get_absent_employee,
     create_document, list_documents, get_document, update_document, delete_document,
     create_award, list_awards, get_award, update_award, delete_award,
     attendance_page, mark_attendance_view, RequestPasswordResetView, PasswordResetConfirmView,
@@ -95,6 +95,7 @@ urlpatterns = [
     path('mark_attendance/', mark_attendance_view, name='mark_attendance'),
     path("today_attendance/", today_attendance, name="today_attendance"),
     path('list_attendance/', list_attendance, name='attendance-list'),
+    path('get_attendance/<str:email>/', get_attendance, name='get_attendance'),
 
     path('password_reset/', RequestPasswordResetView.as_view(), name='password-reset'),
     path('password_reset_confirm/<uidb64>/<token>/', PasswordResetConfirmView.as_view(), name='password-reset-confirm'),
@@ -109,7 +110,9 @@ urlpatterns = [
 
     path('holidays/', HolidayViewSet.as_view({'get': 'list', 'post': 'create'}), name='holiday-list'),
     path('holidays/<int:pk>/', HolidayViewSet.as_view({'get': 'retrieve', 'patch': 'partial_update', 'delete': 'destroy'}), name='holiday-detail'),
-    path('attendance/', list_absent_employees, name='list-absent-employees'),
+    path('list_absent/', list_absent_employees, name='list-absent-employees'),
+    path('get_absent/<str:email>/', get_absent_employee, name='get_absent_employee'),
+
 
     path('applied_jobs/', AppliedJobViewSet.as_view({'get': 'list', 'post': 'create'}), name='career-list'),
     path('applied_jobs/<str:email>/', AppliedJobViewSet.as_view({'get': 'retrieve', 'patch': 'partial_update', 'delete': 'destroy'}), name='career-detail'),

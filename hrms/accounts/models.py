@@ -413,12 +413,58 @@ class EmployeeDetails(models.Model):
         return f"Employee Details of {self.email.email} ({self.account_number})"
     
 
+from django.db import models
+from django.utils import timezone
+from accounts.models import User, Manager  # Adjust import paths as needed
+
 class ReleavedEmployee(models.Model):
-    email = models.EmailField(unique=True)  # stores plain email only
-    fullname = models.CharField(max_length=255, blank=True, null=True)
-    phone = models.CharField(max_length=20, blank=True, null=True)
-    role = models.CharField(max_length=50, blank=True, null=True)  # e.g. "employee", "hr", "admin"
-    designation = models.CharField(max_length=100, blank=True, null=True)
+    email = models.ForeignKey(User, on_delete=models.CASCADE, to_field='email', related_name='releaved_employees')
+    fullname = models.CharField(max_length=255, null=True, blank=True)
+    phone = models.CharField(max_length=20, null=True, blank=True)
+    role = models.CharField(max_length=50, blank=True, null=True) # e.g. "employee", "hr", "admin"
+    department = models.CharField(max_length=100, null=True, blank=True)
+    designation = models.CharField(max_length=100, null=True, blank=True)
+    date_of_birth = models.DateField(null=True, blank=True)
+    date_joined = models.DateField(null=True, blank=True)
+    reports_to = models.ForeignKey(Manager, on_delete=models.SET_NULL, to_field='email', null=True, blank=True)
+    skills = models.TextField(null=True, blank=True)
+    profile_picture = models.URLField(null=True, blank=True)
+    gender = models.CharField(max_length=20, null=True, blank=True)
+    marital_status = models.CharField(max_length=20, null=True, blank=True)
+    nationality = models.CharField(max_length=50, null=True, blank=True)
+    residential_address = models.TextField(null=True, blank=True)
+    permanent_address = models.TextField(null=True, blank=True)
+    emergency_contact_name = models.CharField(max_length=100, null=True, blank=True)
+    emergency_contact_relationship = models.CharField(max_length=50, null=True, blank=True)
+    emergency_contact_no = models.CharField(max_length=20, null=True, blank=True)
+    emp_id = models.CharField(max_length=50, unique=True, null=True, blank=True)
+    employment_type = models.CharField(max_length=50, null=True, blank=True)
+    work_location = models.CharField(max_length=100, null=True, blank=True)
+    team = models.CharField(max_length=100, null=True, blank=True)
+    degree = models.CharField(max_length=100, null=True, blank=True)
+    degree_passout_year = models.PositiveIntegerField(null=True, blank=True)
+    institution = models.CharField(max_length=255, null=True, blank=True)
+    grade = models.CharField(max_length=20, null=True, blank=True)
+    languages = models.TextField(null=True, blank=True)
+    blood_group = models.CharField(max_length=3, null=True, blank=True)
+    account_number = models.CharField(max_length=20, unique=True, null=True, blank=True)
+    father_name = models.CharField(max_length=100, null=True, blank=True)
+    father_contact = models.CharField(max_length=20, null=True, blank=True)
+    mother_name = models.CharField(max_length=100, null=True, blank=True)
+    mother_contact = models.CharField(max_length=20, null=True, blank=True)
+    wife_name = models.CharField(max_length=100, null=True, blank=True)
+    home_address = models.TextField(null=True, blank=True)
+    total_siblings = models.PositiveIntegerField(default=0)
+    brothers = models.PositiveIntegerField(default=0)
+    sisters = models.PositiveIntegerField(default=0)
+    total_children = models.PositiveIntegerField(default=0)
+    bank_name = models.CharField(max_length=100, null=True, blank=True)
+    branch = models.CharField(max_length=100, null=True, blank=True)
+    pf_no = models.CharField(max_length=50, null=True, blank=True)
+    pf_uan = models.CharField(max_length=50, null=True, blank=True)
+    ifsc = models.CharField(max_length=20, null=True, blank=True)
+
+    # Timestamp
     offboarded_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:
@@ -427,7 +473,7 @@ class ReleavedEmployee(models.Model):
         verbose_name_plural = "Releaved Employees"
 
     def __str__(self):
-        return self.email  # ✅ Only shows email (not with role)
+        return self.fullname or str(self.email)
 
 class Holiday(models.Model):
     name = models.CharField(max_length=255)

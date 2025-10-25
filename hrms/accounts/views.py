@@ -1023,6 +1023,27 @@ def list_attendance(request):
     return JsonResponse({"attendance": result}, status=200)
 
 
+@require_GET
+def get_attendance(request, email):
+    """Get attendance records for a specific email"""
+    user = get_object_or_404(User, email=email)
+    attendance_records = Attendance.objects.filter(email=user).order_by('-date')
+
+    result = []
+    for record in attendance_records:
+        result.append({
+            "email": record.email.email,
+            "role": record.email.role,
+            "fullname": record.fullname,
+            "department": record.department,
+            "date": str(record.date),
+            "check_in": str(record.check_in) if record.check_in else None,
+            "check_out": str(record.check_out) if record.check_out else None,
+        })
+
+    return JsonResponse({"attendance": result}, status=200)
+
+
 @csrf_exempt
 @require_http_methods(["POST"])
 def create_report(request):
@@ -2371,6 +2392,15 @@ class HolidayViewSet(viewsets.ModelViewSet):
 def list_absent_employees(request):
     absent_employees = AbsentEmployeeDetails.objects.all()
     serializer = AbsentEmployeeDetailsSerializer(absent_employees, many=True)
+    return Response(serializer.data)
+
+
+@api_view(['GET'])
+def get_absent_employee(request, email):
+    """Get absent employee details for a specific email"""
+    user = get_object_or_404(User, email=email)
+    absent_records = AbsentEmployeeDetails.objects.filter(email=user)
+    serializer = AbsentEmployeeDetailsSerializer(absent_records, many=True)
     return Response(serializer.data)
 
 
