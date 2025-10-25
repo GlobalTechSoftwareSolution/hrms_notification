@@ -499,7 +499,6 @@ class AppliedJobs(models.Model):
     specialization = models.CharField(max_length=255, blank=True, null=True)
     hired = models.BooleanField(default=False)  # Boolean field, default not hired
     report = models.TextField(blank=True, null=True)  # Optional text field for report
-    
     created_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:

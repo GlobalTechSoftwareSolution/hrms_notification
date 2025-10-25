@@ -18,6 +18,7 @@ from django.contrib.auth import authenticate, get_user_model
 from django.utils.dateparse import parse_date
 from django.contrib.auth.tokens import PasswordResetTokenGenerator
 from django.utils.encoding import force_bytes, force_str
+from django.utils.decorators import method_decorator
 from django.utils.http import urlsafe_base64_encode, urlsafe_base64_decode
 from django.core.mail import send_mail, EmailMessage
 from django.contrib.sites.shortcuts import get_current_site
@@ -44,7 +45,7 @@ from .models import (
 # Serializers
 from .serializers import (
     UserSerializer, CEOSerializer, HRSerializer, ManagerSerializer, DepartmentSerializer,
-    EmployeeSerializer, SuperUserCreateSerializer, UserRegistrationSerializer,
+    EmployeeSerializer, SuperUserCreateSerializer, UserRegistrationSerializer, ProjectSerializer,
     AdminSerializer, ReportSerializer, RegisterSerializer, DocumentSerializer, AwardSerializer, TicketSerializer, EmployeeDetailsSerializer, HolidaySerializer, AbsentEmployeeDetailsSerializer, CareerSerializer, AppliedJobSerializer
 )
 
@@ -366,7 +367,15 @@ class BaseUserViewSet(viewsets.ModelViewSet):
     def _upload_profile_picture(self, instance, file_obj):
         client = get_s3_client()
         ext = file_obj.name.split('.')[-1]
-        key = f'images/{instance.email}/profile_picture.{ext}'
+
+        # ✅ Get plain email string (handle both User object and string)
+        email_str = (
+            instance.email.email
+            if hasattr(instance.email, "email") else instance.email
+        )
+
+        # ✅ Generate correct S3 key
+        key = f'images/{email_str}/profile_picture.{ext}'
 
         # Delete old picture
         if hasattr(instance, "profile_picture") and instance.profile_picture and instance.profile_picture != f"{BASE_BUCKET_URL}{key}":
@@ -380,6 +389,7 @@ class BaseUserViewSet(viewsets.ModelViewSet):
         client.upload_fileobj(file_obj, BUCKET_NAME, key, ExtraArgs={"ContentType": file_obj.content_type})
         instance.profile_picture = f"{BASE_BUCKET_URL}{key}"
         instance.save()
+
 
     def _update_employee_details(self, instance, data):
         details_fields = [
@@ -1114,11 +1124,11 @@ def delete_report(request, pk):
     return JsonResponse({"message": "Report deleted successfully."}, status=204)
 
 
-@require_http_methods(["GET"])
+@api_view(['GET'])
 def list_projects(request):
     projects = Project.objects.all().order_by('-created_at')
-    result = [{"id": p.id, "name": p.name, "description": p.description, "status": p.status} for p in projects]
-    return JsonResponse({"projects": result})
+    serializer = ProjectSerializer(projects, many=True)
+    return Response({"projects": serializer.data}, status=status.HTTP_200_OK)
 
 
 @csrf_exempt
@@ -1183,28 +1193,31 @@ def create_project(request):
         return JsonResponse({"error": str(e)}, status=500)
     
     
-@require_http_methods(["GET"])
-def detail_project(request, pk):
+@api_view(['GET'])
+def get_project(request, pk):
     try:
         project = Project.objects.get(id=pk)
-        return JsonResponse({"id": project.id, "name": project.name, "description": project.description, "status": project.status})
     except Project.DoesNotExist:
-        return JsonResponse({"error": "Project not found"}, status=404)
+        return Response({"error": "Project not found"}, status=status.HTTP_404_NOT_FOUND)
+
+    serializer = ProjectSerializer(project)
+    return Response(serializer.data, status=status.HTTP_200_OK)
 
 
-@csrf_exempt
-@require_http_methods(["PATCH"])
+# ---------- Update Project ----------
+@api_view(['PATCH'])
 def update_project(request, pk):
     try:
         project = Project.objects.get(id=pk)
-        data = json.loads(request.body)
-        project.name = data.get("name", project.name)
-        project.description = data.get("description", project.description)
-        project.status = data.get("status", project.status)
-        project.save()
-        return JsonResponse({"message": "Project updated"})
     except Project.DoesNotExist:
-        return JsonResponse({"error": "Project not found"}, status=404)
+        return Response({"error": "Project not found"}, status=status.HTTP_404_NOT_FOUND)
+
+    serializer = ProjectSerializer(project, data=request.data, partial=True)
+    if serializer.is_valid():
+        serializer.save()
+        return Response({"message": "Project updated successfully", "project": serializer.data}, status=status.HTTP_200_OK)
+    else:
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
 
 @csrf_exempt
@@ -2388,12 +2401,15 @@ def upload_resume(instance, file_obj):
 
 
 # ------------------- ViewSet -------------------
+@method_decorator(csrf_exempt, name='dispatch')  # ✅ CSRF disabled for this viewset
 class AppliedJobViewSet(viewsets.ModelViewSet):
     queryset = AppliedJobs.objects.all()
     serializer_class = AppliedJobSerializer
     lookup_field = 'email'
+    permission_classes = [AllowAny]  # Allow all (adjust if you add auth later)
 
     def create(self, request, *args, **kwargs):
+        """Create a new job application"""
         data = request.data.copy()
         resume_file = request.FILES.get('resume')
 
@@ -2407,6 +2423,7 @@ class AppliedJobViewSet(viewsets.ModelViewSet):
         return Response(self.get_serializer(instance).data, status=status.HTTP_201_CREATED)
 
     def partial_update(self, request, *args, **kwargs):
+        """Update any field (like hired status, specialization, etc.)"""
         instance = self.get_object()
         old_hired = instance.hired
 
@@ -2422,29 +2439,29 @@ class AppliedJobViewSet(viewsets.ModelViewSet):
 
     @action(detail=True, methods=['patch'], url_path='set-hired')
     def set_hired(self, request, email=None):
+        """✅ API to set hired=True for a candidate"""
         instance = get_object_or_404(AppliedJobs, email=email)
         if not instance.hired:
             instance.hired = True
             instance.save()
             self.send_hired_email(instance)
-
-        return Response({"message": f"{instance.fullname} is now hired."})
+            return Response({"message": f"{instance.fullname} is now hired."}, status=status.HTTP_200_OK)
+        return Response({"message": f"{instance.fullname} was already marked as hired."}, status=status.HTTP_200_OK)
 
     def send_hired_email(self, instance):
-        """Send email to candidate when hired."""
+        """📩 Send email to candidate when hired"""
         subject = "🎉 Congratulations! You’re Hired!"
         body = f"""
 Dear {instance.fullname},
 
-We are delighted to inform you that you have been successfully selected for the role at Global Tech Solutions.
+We are delighted to inform you that you have been successfully selected for the Global Tech Software Solutions.
 Our HR department will contact you shortly with details regarding your onboarding process, joining date, and documentation requirements.
 
-Welcome to Global Tech Solutions — we look forward to working with you!
+Welcome to Global Tech Software Solutions — we look forward to working with you!
 
-Warm regards,
-HR Department
-Global Tech Solutions
-hr@globaltech.com
+Warm regards,  
+HR Department  
+Global Tech Software Solutions
 """
         try:
             email_msg = EmailMessage(subject, body, settings.DEFAULT_FROM_EMAIL, [instance.email])
@@ -2454,6 +2471,7 @@ hr@globaltech.com
             print(f"⚠️ Failed to send hired email: {e}")
 
     def destroy(self, request, email=None):
+        """Delete application and remove resume from S3 if exists"""
         instance = get_object_or_404(AppliedJobs, email=email)
 
         if instance.resume:

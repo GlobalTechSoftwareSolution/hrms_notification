@@ -7,7 +7,7 @@ from accounts.views import (
     create_payroll, update_payroll_status, get_payroll, list_payrolls,
     list_tasks, get_task, update_task, delete_task, create_task,
     list_reports, create_report, update_report, delete_report,
-    list_projects, create_project, detail_project, update_project, delete_project,
+    list_projects, create_project, get_project, update_project, delete_project,
     list_notices, create_notice, detail_notice, update_notice, delete_notice,
     get_employee_by_email, get_tasks_by_assigned_by,
     create_document, list_documents, get_document, update_document, delete_document,
@@ -68,7 +68,7 @@ urlpatterns = [
     
     path('list_projects/', list_projects, name='list_projects'),
     path('create_project/', create_project, name='create_project'),
-    path('project/<int:pk>/', detail_project, name='detail_project'),
+    path('get_project/<int:pk>/', get_project, name='detail_project'),
     path('update_project/<int:pk>/', update_project, name='update_project'),
     path('delete_project/<int:pk>/', delete_project, name='delete_project'),
 
@@ -111,8 +111,9 @@ urlpatterns = [
     path('holidays/<int:pk>/', HolidayViewSet.as_view({'get': 'retrieve', 'patch': 'partial_update', 'delete': 'destroy'}), name='holiday-detail'),
     path('attendance/', list_absent_employees, name='list-absent-employees'),
 
-    path('applied_jobs/', AppliedJobViewSet.as_view({'get': 'list', 'post': 'create'}), name='career-list'), 
+    path('applied_jobs/', AppliedJobViewSet.as_view({'get': 'list', 'post': 'create'}), name='career-list'),
     path('applied_jobs/<str:email>/', AppliedJobViewSet.as_view({'get': 'retrieve', 'patch': 'partial_update', 'delete': 'destroy'}), name='career-detail'),
+    path('applied_jobs/<str:email>/set_hired/', AppliedJobViewSet.as_view({'patch': 'set_hired'}), name='set-hired'),
     path('careers/', CareerViewSet.as_view({'get': 'list', 'post': 'create'}), name='job-list'),
     path('careers/<int:id>/', CareerViewSet.as_view({'get': 'retrieve', 'patch': 'partial_update', 'delete': 'destroy'}), name='job-detail'),
 ]
