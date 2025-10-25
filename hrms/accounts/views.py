@@ -736,12 +736,15 @@ def create_payroll(request):
         if Payroll.objects.filter(email=user, month=month, year=year).exists():
             return JsonResponse({"error": "Payroll already exists for this month and year"}, status=400)
 
+        # Create new payroll entry
         payroll = Payroll.objects.create(
             email=user,
             basic_salary=data.get("basic_salary", 0.00),
             month=month,
             year=year,
-            status=data.get("status", "Pending")
+            status=data.get("status", "Pending"),
+            STD=data.get("STD", 0),
+            LOP=data.get("LOP", 0),
         )
 
         return JsonResponse({
@@ -749,10 +752,12 @@ def create_payroll(request):
             "payroll": {
                 "email": payroll.email.email,
                 "basic_salary": str(payroll.basic_salary),
+                "STD": payroll.STD,
+                "LOP": payroll.LOP,
                 "month": payroll.month,
                 "year": payroll.year,
                 "status": payroll.status,
-                "pay_date": str(payroll.pay_date)
+                "pay_date": str(payroll.pay_date),
             }
         }, status=201)
 
@@ -765,6 +770,7 @@ def update_payroll_status(request, payroll_id):
     """Update payroll status using payroll ID."""
     if request.method != "PATCH":
         return JsonResponse({"error": "Only PATCH method allowed"}, status=405)
+
     try:
         payroll = get_object_or_404(Payroll, id=payroll_id)
         data = json.loads(request.body)
@@ -773,6 +779,9 @@ def update_payroll_status(request, payroll_id):
         if new_status not in ["Pending", "Paid", "Failed"]:
             return JsonResponse({"error": "Invalid status"}, status=400)
 
+        # Optional: Allow updating STD and LOP when status changes
+        payroll.STD = data.get("STD", payroll.STD)
+        payroll.LOP = data.get("LOP", payroll.LOP)
         payroll.status = new_status
         payroll.save()
 
@@ -781,10 +790,12 @@ def update_payroll_status(request, payroll_id):
             "payroll": {
                 "email": payroll.email.email,
                 "basic_salary": str(payroll.basic_salary),
+                "STD": payroll.STD,
+                "LOP": payroll.LOP,
                 "month": payroll.month,
                 "year": payroll.year,
                 "status": payroll.status,
-                "pay_date": str(payroll.pay_date)
+                "pay_date": str(payroll.pay_date),
             }
         }, status=200)
 
@@ -807,10 +818,12 @@ def get_payroll(request, email):
         payroll_list.append({
             "email": payroll.email.email,
             "basic_salary": str(payroll.basic_salary),
+            "STD": payroll.STD,
+            "LOP": payroll.LOP,
             "month": payroll.month,
             "year": payroll.year,
             "status": payroll.status,
-            "pay_date": str(payroll.pay_date)
+            "pay_date": str(payroll.pay_date),
         })
 
     return JsonResponse({"payrolls": payroll_list}, status=200)
@@ -826,14 +839,15 @@ def list_payrolls(request):
         result.append({
             "email": payroll.email.email,
             "basic_salary": str(payroll.basic_salary),
+            "STD": payroll.STD,
+            "LOP": payroll.LOP,
             "month": payroll.month,
             "year": payroll.year,
             "status": payroll.status,
-            "pay_date": str(payroll.pay_date)
+            "pay_date": str(payroll.pay_date),
         })
 
     return JsonResponse({"payrolls": result}, status=200)
-
 
 @require_GET
 def list_tasks(request):

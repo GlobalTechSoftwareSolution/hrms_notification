@@ -272,6 +272,9 @@ class Payroll(models.Model):
     pay_date = models.DateField(default=timezone.localdate)
     month = models.CharField(max_length=20)
     year = models.IntegerField(default=timezone.now().year)
+    STD = models.IntegerField(default=0, help_text="Number of standard working days in the month")
+    LOP = models.IntegerField(default=0, help_text="Loss of pay days (unpaid leave)")
+
     status = models.CharField(
         max_length=20,
         choices=[('Pending', 'Pending'), ('Paid', 'Paid'), ('Failed', 'Failed')],
