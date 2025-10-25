@@ -486,11 +486,11 @@ class AppliedJobs(models.Model):
     ]
     
     email = models.EmailField(primary_key=True, db_column='email_id')  # Field name is 'email', DB column is 'email_id'
-    full_name = models.CharField(max_length=255)
+    fullname = models.CharField(max_length=255)
     gender = models.CharField(max_length=10, choices=GENDER_CHOICES)
     phone_number = models.CharField(max_length=20)
     course = models.CharField(max_length=255, blank=True, null=True)
-    resume = models.FileField(upload_to='resumes/', null=True, blank=True)
+    resume = models.URLField(null=True, blank=True)
     available_for_training = models.CharField(max_length=3, choices=AVAILABILITY_CHOICES)
     work_experience = models.TextField(blank=True, null=True)
     specialization = models.CharField(max_length=255, blank=True, null=True)
@@ -534,7 +534,7 @@ class JobPosting(models.Model):
     updated_at = models.DateTimeField(auto_now=True)
 
     class Meta:
-        db_table = 'accounts_job_postings'
+        db_table = 'accounts_careers'
 
     def __str__(self):
         return f"{self.title} ({self.department})"

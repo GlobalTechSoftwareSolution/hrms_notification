@@ -204,11 +204,12 @@ class AbsentEmployeeDetailsSerializer(serializers.ModelSerializer):
 
 class CareerSerializer(serializers.ModelSerializer):
     class Meta:
-        model = AppliedJobs
-        fields = '__all__'
-
-
-class JobPostingSerializer(serializers.ModelSerializer):
-    class Meta:
         model = JobPosting
         fields = '__all__'
+
+
+class AppliedJobSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = AppliedJobs
+        fields = '__all__'
+        read_only_fields = ['resume']

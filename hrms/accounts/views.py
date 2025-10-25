@@ -1,4 +1,4 @@
-import os, json, pytz, face_recognition, tempfile, requests, boto3
+import os, json, pytz, face_recognition, tempfile, requests, boto3, mimetypes
 
 from io import BytesIO
 from pathlib import Path
@@ -31,7 +31,7 @@ from rest_framework import status, viewsets, generics, filters
 from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework.permissions import AllowAny
-from rest_framework.decorators import api_view, permission_classes
+from rest_framework.decorators import api_view, permission_classes, action
 
 # Models
 from .models import (
@@ -45,7 +45,7 @@ from .models import (
 from .serializers import (
     UserSerializer, CEOSerializer, HRSerializer, ManagerSerializer, DepartmentSerializer,
     EmployeeSerializer, SuperUserCreateSerializer, UserRegistrationSerializer,
-    AdminSerializer, ReportSerializer, RegisterSerializer, DocumentSerializer, AwardSerializer, TicketSerializer, EmployeeDetailsSerializer, HolidaySerializer, AbsentEmployeeDetailsSerializer, CareerSerializer, JobPostingSerializer
+    AdminSerializer, ReportSerializer, RegisterSerializer, DocumentSerializer, AwardSerializer, TicketSerializer, EmployeeDetailsSerializer, HolidaySerializer, AbsentEmployeeDetailsSerializer, CareerSerializer, AppliedJobSerializer
 )
 
 # Ensure User model points to custom one
@@ -2348,12 +2348,107 @@ def list_absent_employees(request):
 
 
 class CareerViewSet(viewsets.ModelViewSet):
-    queryset = AppliedJobs.objects.all()
+    queryset = JobPosting.objects.all()
     serializer_class = CareerSerializer
     lookup_field = 'email'
     
 
-class JobPostingViewSet(viewsets.ModelViewSet):
-    queryset = JobPosting.objects.all()
-    serializer_class = JobPostingSerializer
-    lookup_field = 'id'
+def upload_resume(instance, file_obj):
+    client = get_s3_client()
+    ext = file_obj.name.split('.')[-1]
+    key = f'careers_resume/{instance.email}.{ext}'
+
+    # Delete old resume if exists
+    if instance.resume and instance.resume != f"{BASE_BUCKET_URL}{key}":
+        old_key = instance.resume.replace(BASE_BUCKET_URL, "")
+        try:
+            client.delete_object(Bucket=BUCKET_NAME, Key=old_key)
+        except Exception as e:
+            print(f"Failed to delete old resume: {e}")
+
+    # ✅ Allow both PDF and images
+    content_type = file_obj.content_type or "application/octet-stream"
+    client.upload_fileobj(file_obj, BUCKET_NAME, key, ExtraArgs={"ContentType": content_type})
+    instance.resume = f"{BASE_BUCKET_URL}{key}"
+    instance.save()
+
+
+# ------------------- ViewSet -------------------
+class AppliedJobViewSet(viewsets.ModelViewSet):
+    queryset = AppliedJobs.objects.all()
+    serializer_class = AppliedJobSerializer
+    lookup_field = 'email'
+
+    def create(self, request, *args, **kwargs):
+        data = request.data.copy()
+        resume_file = request.FILES.get('resume')
+
+        serializer = self.get_serializer(data=data)
+        serializer.is_valid(raise_exception=True)
+        instance = serializer.save()
+
+        if resume_file:
+            upload_resume(instance, resume_file)
+
+        return Response(self.get_serializer(instance).data, status=status.HTTP_201_CREATED)
+
+    def partial_update(self, request, *args, **kwargs):
+        instance = self.get_object()
+        old_hired = instance.hired
+
+        serializer = self.get_serializer(instance, data=request.data, partial=True)
+        serializer.is_valid(raise_exception=True)
+        instance = serializer.save()
+
+        # ✅ Send email if hired changed from False → True
+        if not old_hired and instance.hired:
+            self.send_hired_email(instance)
+
+        return Response(self.get_serializer(instance).data)
+
+    @action(detail=True, methods=['patch'], url_path='set-hired')
+    def set_hired(self, request, email=None):
+        instance = get_object_or_404(AppliedJobs, email=email)
+        if not instance.hired:
+            instance.hired = True
+            instance.save()
+            self.send_hired_email(instance)
+
+        return Response({"message": f"{instance.fullname} is now hired."})
+
+    def send_hired_email(self, instance):
+        """Send email to candidate when hired."""
+        subject = "🎉 Congratulations! You’re Hired!"
+        body = f"""
+Dear {instance.fullname},
+
+We are delighted to inform you that you have been successfully selected for the role at Global Tech Solutions.
+Our HR department will contact you shortly with details regarding your onboarding process, joining date, and documentation requirements.
+
+Welcome to Global Tech Solutions — we look forward to working with you!
+
+Warm regards,
+HR Department
+Global Tech Solutions
+hr@globaltech.com
+"""
+        try:
+            email_msg = EmailMessage(subject, body, settings.DEFAULT_FROM_EMAIL, [instance.email])
+            email_msg.send(fail_silently=False)
+            print(f"✅ Hired email sent to {instance.email}")
+        except Exception as e:
+            print(f"⚠️ Failed to send hired email: {e}")
+
+    def destroy(self, request, email=None):
+        instance = get_object_or_404(AppliedJobs, email=email)
+
+        if instance.resume:
+            client = get_s3_client()
+            key = instance.resume.replace(BASE_BUCKET_URL, "")
+            try:
+                client.delete_object(Bucket=BUCKET_NAME, Key=key)
+            except Exception as e:
+                print(f"Failed to delete resume: {e}")
+
+        instance.delete()
+        return Response({"message": f"Application for {email} deleted."}, status=status.HTTP_200_OK)
