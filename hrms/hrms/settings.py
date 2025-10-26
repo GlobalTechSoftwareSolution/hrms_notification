@@ -148,7 +148,7 @@ import dj_database_url
 from decouple import config
 
 DATABASES = {
-    'default': dj_database_url.parse(config('DATABASE_URL'))
+    'default': dj_database_url.parse(str(config('DATABASE_URL', default='')))
 }
 
 # Password validation

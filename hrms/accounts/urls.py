@@ -13,9 +13,10 @@ from accounts.views import (
     create_document, list_documents, get_document, update_document, delete_document,
     create_award, list_awards, get_award, update_award, delete_award,
     attendance_page, mark_attendance_view, RequestPasswordResetView, PasswordResetConfirmView,
-    appointment_letter, offer_letter, releaving_letter, bonafide_certificate, TicketViewSet, HolidayViewSet, list_absent_employees, CareerViewSet, AppliedJobViewSet
+    appointment_letter, offer_letter, releaving_letter, bonafide_certificate, TicketViewSet, 
+    HolidayViewSet, list_absent_employees, CareerViewSet, AppliedJobViewSet, 
+    transfer_to_releaved, approve_releaved, ReleavedEmployeeViewSet
 )
-
 
 urlpatterns = [
     path('signup/', SignupView.as_view(), name='user-signup'),
@@ -119,4 +120,9 @@ urlpatterns = [
     path('applied_jobs/<str:email>/set_hired/', AppliedJobViewSet.as_view({'patch': 'set_hired'}), name='set-hired'),
     path('careers/', CareerViewSet.as_view({'get': 'list', 'post': 'create'}), name='job-list'),
     path('careers/<int:id>/', CareerViewSet.as_view({'get': 'retrieve', 'patch': 'partial_update', 'delete': 'destroy'}), name='job-detail'),
+
+    # path('releaved/', ReleavedEmployeeViewSet.as_view({'get': 'list', 'post': 'create'}), name='releaved-list'),
+    path('releaved/', transfer_to_releaved, name='transfer-to-releaved'),
+    # path('releaved/<str:email>/', ReleavedEmployeeViewSet.as_view({'get': 'retrieve', 'patch': 'partial_update'}), name='releaved-detail'),
+    path('releaved/<str:email>/', approve_releaved, name='approve-releaved'),
 ]

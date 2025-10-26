@@ -23,8 +23,8 @@ from django.utils.http import urlsafe_base64_encode, urlsafe_base64_decode
 from django.core.mail import send_mail, EmailMessage
 from django.contrib.sites.shortcuts import get_current_site
 from django.template.loader import render_to_string
-from django.db.models import Q
-from django.db import models, IntegrityError
+from django.db.models import Q 
+from django.db import models, IntegrityError, transaction
 from django.shortcuts import get_object_or_404
 from django.http.multipartparser import MultiPartParser, MultiPartParserError
 
@@ -46,7 +46,7 @@ from .models import (
 from .serializers import (
     UserSerializer, CEOSerializer, HRSerializer, ManagerSerializer, DepartmentSerializer,
     EmployeeSerializer, SuperUserCreateSerializer, UserRegistrationSerializer, ProjectSerializer,
-    AdminSerializer, ReportSerializer, RegisterSerializer, DocumentSerializer, AwardSerializer, TicketSerializer, EmployeeDetailsSerializer, HolidaySerializer, AbsentEmployeeDetailsSerializer, CareerSerializer, AppliedJobSerializer
+    AdminSerializer, ReportSerializer, RegisterSerializer, DocumentSerializer, AwardSerializer, TicketSerializer, EmployeeDetailsSerializer, HolidaySerializer, AbsentEmployeeDetailsSerializer, CareerSerializer, AppliedJobSerializer, ReleavedEmployeeSerializer
 )
 
 # Ensure User model points to custom one
@@ -349,13 +349,22 @@ User = get_user_model()
 
 # ------------------- MinIO Client -------------------
 def get_s3_client():
-    return boto3.client(
-        's3',
-        endpoint_url=f"https://{settings.MINIO_STORAGE['ENDPOINT']}",
-        aws_access_key_id=settings.MINIO_STORAGE['ACCESS_KEY'],
-        aws_secret_access_key=settings.MINIO_STORAGE['SECRET_KEY'],
-        use_ssl=settings.MINIO_STORAGE['USE_SSL']
+    minio_conf = getattr(settings, "MINIO_STORAGE", {
+        "ENDPOINT": "minio.globaltechsoftwaresolutions.cloud",
+        "ACCESS_KEY": "admin",
+        "SECRET_KEY": "admin12345",
+        "BUCKET_NAME": "hrms-media",
+        "USE_SSL": True,
+    })
+    protocol = "https" if minio_conf.get("USE_SSL", False) else "http"
+    client = boto3.client(
+        "s3",
+        endpoint_url=f"{protocol}://{minio_conf['ENDPOINT']}",
+        aws_access_key_id=minio_conf["ACCESS_KEY"],
+        aws_secret_access_key=minio_conf["SECRET_KEY"],
+        verify=True  # Use True for SSL verification
     )
+    return client
 
 BASE_BUCKET_URL = getattr(settings, "BASE_BUCKET_URL", "https://minio.globaltechsoftwaresolutions.cloud/hrms-media/")
 BUCKET_NAME = settings.MINIO_STORAGE["BUCKET_NAME"]
@@ -481,13 +490,13 @@ class BaseUserViewSet(viewsets.ModelViewSet):
                 email_str = employee.email
 
             # 3️⃣ Create ReleavedEmployee entry with plain email
-            ReleavedEmployee.objects.create(
-                email=email_str,
-                fullname=getattr(employee, "fullname", None),
-                phone=getattr(employee, "phone", None),
-                designation=getattr(employee, "designation", None),
-                role="employee"  # explicitly set which table they came from
-            )
+            # ReleavedEmployee.objects.create(
+            #     email=email_str,
+            #     fullname=getattr(employee, "fullname", None),
+            #     phone=getattr(employee, "phone", None),
+            #     designation=getattr(employee, "designation", None),
+            #     role="employee"  # explicitly set which table they came from
+            # )
 
             # 4️⃣ Delete related EmployeeDetails
             try:
@@ -513,7 +522,7 @@ class BaseUserViewSet(viewsets.ModelViewSet):
                 user.delete()
 
             return Response(
-                {"message": f"{email_str} successfully offboarded and moved to ReleavedEmployee."},
+                {"message": f"{email_str} successfully offboarded."},
                 status=status.HTTP_200_OK
             )
 
@@ -599,6 +608,25 @@ class DepartmentViewSet(viewsets.ModelViewSet):
     queryset = Department.objects.all()
     serializer_class = DepartmentSerializer
     lookup_field = 'id'
+
+class ReleavedEmployeeViewSet(viewsets.ModelViewSet):
+    """
+    ViewSet for ReleavedEmployee - archived/offboarded employees.
+    - List all released employees
+    - Retrieve by email (string field, not FK)
+    - Update approval status
+    """
+    queryset = ReleavedEmployee.objects.all().order_by('-offboarded_at')
+    serializer_class = ReleavedEmployeeSerializer
+    lookup_field = 'email'  # Use email string as lookup
+    
+    def get_object(self):
+        """
+        Override to lookup by email string field.
+        """
+        email = self.kwargs.get('email')
+        obj = get_object_or_404(ReleavedEmployee, email=email)
+        return obj
 
 @csrf_exempt
 def apply_leave(request):
@@ -1404,24 +1432,7 @@ from django.conf import settings
 from django.http.multipartparser import MultiPartParser, MultiPartParserError
 from .models import Document, User  # adjust import if needed
 
-# Helper function to get S3/MinIO client
-def get_s3_client():
-    minio_conf = getattr(settings, "MINIO_STORAGE", {
-        "ENDPOINT": "minio.globaltechsoftwaresolutions.cloud",
-        "ACCESS_KEY": "admin",
-        "SECRET_KEY": "admin12345",
-        "BUCKET_NAME": "hrms-media",
-        "USE_SSL": True,
-    })
-    protocol = "https" if minio_conf.get("USE_SSL", False) else "http"
-    client = boto3.client(
-        "s3",
-        endpoint_url=f"{protocol}://{minio_conf['ENDPOINT']}",
-        aws_access_key_id=minio_conf["ACCESS_KEY"],
-        aws_secret_access_key=minio_conf["SECRET_KEY"],
-        verify=True  # Use True for SSL verification
-    )
-    return client
+
 
 DOCUMENT_FIELDS = [
     "tenth", "twelth", "degree", "masters", "marks_card", "certificates",
@@ -2514,3 +2525,153 @@ Global Tech Software Solutions
 
         instance.delete()
         return Response({"message": f"Application for {email} deleted."}, status=status.HTTP_200_OK)
+ 
+from django.views.decorators.csrf import csrf_exempt
+from rest_framework.decorators import api_view
+from rest_framework.response import Response
+from rest_framework import status
+from django.contrib.auth import get_user_model
+from .models import Employee, EmployeeDetails, ReleavedEmployee
+
+User = get_user_model()  # Correct way to get custom user model
+
+@csrf_exempt
+@api_view(['POST'])
+def transfer_to_releaved(request):
+    """
+    Transfer an employee to ReleavedEmployee table.
+    Expects JSON: { "email": "employee_email@example.com" }
+    """
+    email = request.data.get('email')
+    if not email:
+        return Response({"error": "Email is required"}, status=status.HTTP_400_BAD_REQUEST)
+
+    try:
+        user = User.objects.get(email=email)
+        employee = Employee.objects.get(email=user)
+        details = EmployeeDetails.objects.get(email=user)
+    except User.DoesNotExist:
+        return Response({"error": "User not found"}, status=status.HTTP_404_NOT_FOUND)
+    except Employee.DoesNotExist:
+        return Response({"error": "Employee not found"}, status=status.HTTP_404_NOT_FOUND)
+    except EmployeeDetails.DoesNotExist:
+        return Response({"error": "EmployeeDetails not found"}, status=status.HTTP_404_NOT_FOUND)
+
+    # Check if already exists in ReleavedEmployee (by email string)
+    existing_releaved = ReleavedEmployee.objects.filter(email=email).first()
+    if existing_releaved:
+        # If previous resignation was rejected (approved='no'), delete it and allow reapplication
+        if existing_releaved.approved == 'no':
+            existing_releaved.delete()
+        # If still pending (approved=None) or approved='yes', prevent duplicate
+        elif existing_releaved.approved in [None, 'yes']:
+            status_msg = "pending approval" if existing_releaved.approved is None else "already approved"
+            return Response({"message": f"{email} resignation is {status_msg}."}, status=status.HTTP_400_BAD_REQUEST)
+
+    # Create ReleavedEmployee with email as string
+    data = {
+        'email': email,  # Store email as string, not User FK
+        'fullname': employee.fullname,
+        'phone': employee.phone,
+        'role': user.role,
+        'department': employee.department,
+        'designation': employee.designation,
+        'date_of_birth': employee.date_of_birth,
+        'date_joined': employee.date_joined,
+        'profile_picture': employee.profile_picture,
+        'skills': employee.skills,
+        'gender': employee.gender,
+        'marital_status': employee.marital_status,
+        'nationality': employee.nationality,
+        'residential_address': employee.residential_address,
+        'permanent_address': employee.permanent_address,
+        'emergency_contact_name': employee.emergency_contact_name,
+        'emergency_contact_relationship': employee.emergency_contact_relationship,
+        'emergency_contact_no': employee.emergency_contact_no,
+        'emp_id': employee.emp_id,
+        'employment_type': employee.employment_type,
+        'work_location': employee.work_location,
+        'team': employee.team,
+        'degree': employee.degree,
+        'degree_passout_year': employee.degree_passout_year,
+        'institution': employee.institution,
+        'grade': employee.grade,
+        'languages': employee.languages,
+        'blood_group': employee.blood_group,
+        # EmployeeDetails fields
+        'account_number': details.account_number,
+        'father_name': details.father_name,
+        'father_contact': details.father_contact,
+        'mother_name': details.mother_name,
+        'mother_contact': details.mother_contact,
+        'wife_name': details.wife_name,
+        'home_address': details.home_address,
+        'total_siblings': details.total_siblings,
+        'brothers': details.brothers,
+        'sisters': details.sisters,
+        'total_children': details.total_children,
+        'bank_name': details.bank_name,
+        'branch': details.branch,
+        'pf_no': details.pf_no,
+        'pf_uan': details.pf_uan,
+        'ifsc': details.ifsc,
+        'approved': None,
+    }
+
+    releaved = ReleavedEmployee.objects.create(**data)
+
+    return Response({"message": f"{email} transferred to ReleavedEmployee."}, status=status.HTTP_201_CREATED)
+
+
+
+@csrf_exempt
+@api_view(['PATCH'])
+def approve_releaved(request, email):
+    """
+    Approve a releaved employee:
+    - Update ReleavedEmployee row (approved, description)
+    - Delete related Employee, EmployeeDetails, and User if approved='yes'
+    - Keep ReleavedEmployee row intact (email is stored as string, not FK)
+    """
+    approved = request.data.get('approved')
+    description = request.data.get('description', '')
+
+    if approved not in ['yes', 'no']:
+        return Response({"error": "approved must be 'yes' or 'no'."}, status=status.HTTP_400_BAD_REQUEST)
+
+    try:
+        # Use email string lookup instead of email__email
+        releaved = ReleavedEmployee.objects.get(email=email)
+    except ReleavedEmployee.DoesNotExist:
+        return Response({"error": "ReleavedEmployee not found."}, status=status.HTTP_404_NOT_FOUND)
+
+    # Update the ReleavedEmployee row
+    releaved.approved = approved
+    releaved.description = description
+    releaved.offboarded_at = timezone.now()
+    releaved.save()
+
+    if approved == 'yes':
+        try:
+            # Find and delete User by email string
+            user = User.objects.filter(email=email).first()
+            if user:
+                # Delete related records (signals will handle backup)
+                Employee.objects.filter(email=user).delete()
+                EmployeeDetails.objects.filter(email=user).delete()
+                user.delete()  # Delete the User
+                
+                # ReleavedEmployee is unaffected since email is now a plain string field
+        except Exception as e:
+            return Response({"error": f"Failed to delete related records: {str(e)}"}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+        return Response({
+            "message": f"{email} approval set to {approved}. Employee, EmployeeDetails, and User deleted. ReleavedEmployee preserved."
+        }, status=status.HTTP_200_OK)
+    
+    else:  # approved == 'no'
+        # Rejection - keep the record with approved='no' status
+        # Employee can reapply (transfer_to_releaved will handle deletion of rejected record)
+        return Response({
+            "message": f"{email} resignation rejected. Record marked as rejected."
+        }, status=status.HTTP_200_OK)

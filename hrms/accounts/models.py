@@ -3,6 +3,10 @@ from django.contrib.auth.models import AbstractBaseUser, PermissionsMixin, BaseU
 from django.utils import timezone
 from django.core.exceptions import ValidationError
 from datetime import datetime, time
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from django.db.models.manager import Manager
 
 
 # ------------------- USER -------------------
@@ -48,8 +52,8 @@ class Department(models.Model):
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
-    def __str__(self):
-        return self.department_name
+    def __str__(self) -> str:
+        return str(self.department_name)
 
 
 # ------------------- EMPLOYEE TYPES -------------------
@@ -108,7 +112,7 @@ class Admin(models.Model):
     office_address = models.TextField(null=True, blank=True)
     profile_picture = models.URLField(null=True, blank=True)
 
-    def _str_(self):
+    def __str__(self) -> str:
         return f"{self.fullname} (Admin)"
 
 
@@ -192,7 +196,7 @@ class Document(models.Model):
     bonafide_crt = models.URLField(null=True, blank=True)
     uploaded_at = models.DateTimeField(auto_now_add=True)
 
-    def __str__(self):
+    def __str__(self) -> str:
         return f"Documents for {self.email.email}"
 
 
@@ -223,7 +227,7 @@ class Attendance(models.Model):
     CHECK_IN_DEADLINE = time(10, 45)  # 10:45 AM
 
     def save(self, *args, **kwargs):
-        # Fill fullname and department
+        # Fill fullname and department from Employee
         if self.email:
             try:
                 employee = self.email.employee
@@ -231,17 +235,6 @@ class Attendance(models.Model):
                 self.department = employee.department
             except Employee.DoesNotExist:
                 pass
-
-        # Check-in constraint
-        if self.check_in:
-            if self.check_in > self.CHECK_IN_DEADLINE:
-                # Mark employee as absent
-                AbsentEmployeeDetails.objects.get_or_create(
-                    email=self.email,
-                    date=self.date
-                )
-                # Prevent saving late check-in
-                raise ValidationError(f"Check-in after {self.CHECK_IN_DEADLINE.strftime('%H:%M')} is not allowed.")
 
         super().save(*args, **kwargs)
 
@@ -261,7 +254,7 @@ class Leave(models.Model):
     class Meta:
         ordering = ['-applied_on']
 
-    def __str__(self):
+    def __str__(self) -> str:
         return f"{self.email.email} Leave from {self.start_date} to {self.end_date} [{self.status}]"
 
 
@@ -285,7 +278,7 @@ class Payroll(models.Model):
         ordering = ['-pay_date']
         unique_together = ('email', 'month', 'year')
 
-    def __str__(self):
+    def __str__(self) -> str:
         return f"Payroll for {self.email.email} - {self.month} {self.year}"
 
 
@@ -307,7 +300,7 @@ class TaskTable(models.Model):
     class Meta:
         ordering = ['-created_at']
 
-    def __str__(self):
+    def __str__(self) -> str:
         return f"Task: {self.title} for {self.email.email} → {self.status}"
 
 
@@ -325,7 +318,7 @@ class Report(models.Model):
         ordering = ['-date', '-created_at']
         unique_together = ('email', 'date')
 
-    def __str__(self):
+    def __str__(self) -> str:
         return f"{self.title} ({self.date}) by {self.email.email if self.email else 'Unknown'}"
 
 
@@ -344,8 +337,8 @@ class Project(models.Model):
     class Meta:
         ordering = ['-created_at']
 
-    def __str__(self):
-        return self.name
+    def __str__(self) -> str:
+        return str(self.name)
 
 
 class Notice(models.Model):
@@ -363,8 +356,8 @@ class Notice(models.Model):
     class Meta:
         ordering = ['-posted_date']
 
-    def __str__(self):
-        return self.title
+    def __str__(self) -> str:
+        return str(self.title)
 
 
 class Ticket(models.Model):
@@ -413,20 +406,23 @@ class EmployeeDetails(models.Model):
         return f"Employee Details of {self.email.email} ({self.account_number})"
     
 
-from django.db import models
-from django.utils import timezone
-from accounts.models import User, Manager  # Adjust import paths as needed
-
 class ReleavedEmployee(models.Model):
-    email = models.ForeignKey(User, on_delete=models.CASCADE, to_field='email', related_name='releaved_employees')
+    # Store email as plain text - this is a backup/archive table that should never be modified
+    email = models.EmailField(max_length=254, null=True, blank=True)  # Plain email field, not FK
     fullname = models.CharField(max_length=255, null=True, blank=True)
     phone = models.CharField(max_length=20, null=True, blank=True)
-    role = models.CharField(max_length=50, blank=True, null=True) # e.g. "employee", "hr", "admin"
+    role = models.CharField(max_length=50, blank=True, null=True)
     department = models.CharField(max_length=100, null=True, blank=True)
     designation = models.CharField(max_length=100, null=True, blank=True)
     date_of_birth = models.DateField(null=True, blank=True)
     date_joined = models.DateField(null=True, blank=True)
-    reports_to = models.ForeignKey(Manager, on_delete=models.SET_NULL, to_field='email', null=True, blank=True)
+    reports_to = models.ForeignKey(
+        Manager,
+        on_delete=models.SET_NULL,
+        to_field='email',
+        null=True,
+        blank=True
+    )
     skills = models.TextField(null=True, blank=True)
     profile_picture = models.URLField(null=True, blank=True)
     gender = models.CharField(max_length=20, null=True, blank=True)
@@ -454,26 +450,27 @@ class ReleavedEmployee(models.Model):
     mother_contact = models.CharField(max_length=20, null=True, blank=True)
     wife_name = models.CharField(max_length=100, null=True, blank=True)
     home_address = models.TextField(null=True, blank=True)
-    total_siblings = models.PositiveIntegerField(default=0)
-    brothers = models.PositiveIntegerField(default=0)
-    sisters = models.PositiveIntegerField(default=0)
-    total_children = models.PositiveIntegerField(default=0)
+    total_siblings = models.PositiveIntegerField(default=0, null=True, blank=True)
+    brothers = models.PositiveIntegerField(default=0, null=True, blank=True)
+    sisters = models.PositiveIntegerField(default=0, null=True, blank=True)
+    total_children = models.PositiveIntegerField(default=0, null=True, blank=True)
     bank_name = models.CharField(max_length=100, null=True, blank=True)
     branch = models.CharField(max_length=100, null=True, blank=True)
     pf_no = models.CharField(max_length=50, null=True, blank=True)
     pf_uan = models.CharField(max_length=50, null=True, blank=True)
     ifsc = models.CharField(max_length=20, null=True, blank=True)
-
-    # Timestamp
-    offboarded_at = models.DateTimeField(auto_now_add=True)
+    approved = models.CharField(max_length=10, null=True, blank=True)
+    description = models.TextField(null=True, blank=True)
+    offboarded_at = models.DateTimeField(default=timezone.now, null=True, blank=True)
 
     class Meta:
         db_table = 'accounts_releavedemployees'
         verbose_name = "Releaved Employee"
         verbose_name_plural = "Releaved Employees"
 
-    def __str__(self):
-        return self.fullname or str(self.email)
+    def __str__(self) -> str:
+        return str(self.email or self.fullname or "Released Employee")
+
 
 class Holiday(models.Model):
     name = models.CharField(max_length=255)

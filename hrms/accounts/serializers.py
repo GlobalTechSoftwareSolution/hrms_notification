@@ -1,5 +1,5 @@
 from rest_framework import serializers
-from .models import User, CEO, HR, Manager, Employee, Admin, Leave, Attendance, Report, Project, Notice, Document, Award, Department, Ticket, EmployeeDetails, Holiday, AbsentEmployeeDetails, AppliedJobs, JobPosting
+from .models import User, CEO, HR, Manager, Employee, Admin, Leave, Attendance, Report, Project, Notice, Document, Award, Department, Ticket, EmployeeDetails, Holiday, AbsentEmployeeDetails, AppliedJobs, JobPosting, ReleavedEmployee
 
 class UserRegistrationSerializer(serializers.ModelSerializer):
     password = serializers.CharField(write_only=True, min_length=8)
@@ -213,3 +213,9 @@ class AppliedJobSerializer(serializers.ModelSerializer):
         model = AppliedJobs
         fields = '__all__'
         read_only_fields = ['resume']
+
+
+class ReleavedEmployeeSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = ReleavedEmployee
+        fields = '__all__'

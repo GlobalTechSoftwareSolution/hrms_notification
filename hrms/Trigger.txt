@@ -1,3 +1,20 @@
+-- =====================================================================
+-- ⚠️ IMPORTANT: THIS DATABASE TRIGGER IS NOT CURRENTLY IN USE
+-- =====================================================================
+-- This PostgreSQL trigger has been REPLACED by Django signals for better
+-- maintainability and to avoid race conditions between database-level
+-- and application-level logic.
+--
+-- Current Implementation: Django signals in accounts/signals.py handle:
+--   1. Role table management (Employee, HR, Manager, CEO, Admin)
+--   2. Automatic EmployeeDetails creation for employees
+--   3. ReleavedEmployee backup before user deletion
+--   4. is_staff flag validation
+--
+-- DO NOT apply this trigger to the database unless you remove the Django
+-- signals implementation to avoid conflicts and data inconsistencies.
+-- =====================================================================
+
 CREATE OR REPLACE FUNCTION manage_role_tables_on_user_change()
 RETURNS TRIGGER AS $$
 BEGIN
