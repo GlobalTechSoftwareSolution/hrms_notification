@@ -121,8 +121,6 @@ urlpatterns = [
     path('careers/', CareerViewSet.as_view({'get': 'list', 'post': 'create'}), name='job-list'),
     path('careers/<int:id>/', CareerViewSet.as_view({'get': 'retrieve', 'patch': 'partial_update', 'delete': 'destroy'}), name='job-detail'),
 
-    # path('releaved/', ReleavedEmployeeViewSet.as_view({'get': 'list', 'post': 'create'}), name='releaved-list'),
     path('releaved/', transfer_to_releaved, name='transfer-to-releaved'),
-    # path('releaved/<str:email>/', ReleavedEmployeeViewSet.as_view({'get': 'retrieve', 'patch': 'partial_update'}), name='releaved-detail'),
     path('releaved/<str:email>/', approve_releaved, name='approve-releaved'),
 ]

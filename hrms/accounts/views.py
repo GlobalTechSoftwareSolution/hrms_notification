@@ -2418,7 +2418,7 @@ def get_absent_employee(request, email):
 class CareerViewSet(viewsets.ModelViewSet):
     queryset = JobPosting.objects.all()
     serializer_class = CareerSerializer
-    lookup_field = 'email'
+    lookup_field = 'id'  # JobPosting uses 'id' as primary key, not 'email'
     
 
 def upload_resume(instance, file_obj):
