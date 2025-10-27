@@ -39,7 +39,7 @@ INSTALLED_APPS = [
     'rest_framework',
     'corsheaders',
     'channels',
-    'accounts',
+    'accounts.apps.AccountsConfig',  # Updated to use AppConfig for scheduler
     # 'chat',
     'storages',
 ]

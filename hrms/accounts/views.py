@@ -1967,6 +1967,100 @@ def mark_work_attendance_view(request):
         return JsonResponse({"status": "error", "message": str(e)}, status=500)
 
 
+@api_view(['POST'])
+@permission_classes([AllowAny])
+def mark_absent_employees():
+    """
+    Mark employees as absent if they haven't checked in by 10:45 AM IST.
+    This should be run as a scheduled task daily at 10:45 AM IST.
+    Skips Sundays and holidays from Holiday table.
+    """
+    try:
+        now_ist = timezone.localtime(timezone.now(), IST)
+        today = now_ist.date()
+        current_time = now_ist.time()
+        weekday_name = today.strftime('%A')
+        
+        # Check if today is Sunday
+        if today.weekday() == 6:  # Sunday = 6
+            return JsonResponse({
+                "status": "info",
+                "message": f"Today is Sunday ({weekday_name}) - No absent marking needed!",
+                "date": str(today),
+                "weekday": weekday_name
+            }, status=200)
+        
+        # Check if today is a holiday
+        from accounts.models import Holiday
+        is_holiday = Holiday.objects.filter(date=today).exists()
+        if is_holiday:
+            holiday = Holiday.objects.get(date=today)
+            return JsonResponse({
+                "status": "info",
+                "message": f"Today is a holiday: {holiday.name} - No absent marking needed!",
+                "date": str(today),
+                "holiday_name": holiday.name,
+                "weekday": weekday_name
+            }, status=200)
+        
+        # Check if current time is past 10:45 AM (10:45)
+        deadline = time(10, 45)  # 10:45 AM
+        
+        if current_time < deadline:
+            return JsonResponse({
+                "status": "info",
+                "message": "Not yet 10:45 AM IST. Absent marking skipped."
+            }, status=200)
+        
+        # Get all active employees
+        all_employees = Employee.objects.all()
+        marked_absent_count = 0
+        absent_employees = []
+        
+        for emp in all_employees:
+            # Check if employee has checked in today
+            attendance_exists = Attendance.objects.filter(
+                email=emp.email,
+                date=today,
+                check_in__isnull=False
+            ).exists()
+            
+            if not attendance_exists:
+                # Check if already marked absent
+                already_absent = AbsentEmployeeDetails.objects.filter(
+                    email=emp.email,
+                    date=today
+                ).exists()
+                
+                if not already_absent:
+                    # Mark as absent
+                    AbsentEmployeeDetails.objects.create(
+                        email=emp.email,
+                        date=today
+                    )
+                    marked_absent_count += 1
+                    absent_employees.append({
+                        "email": emp.email.email,
+                        "fullname": emp.fullname,
+                        "department": emp.department
+                    })
+        
+        return JsonResponse({
+            "status": "success",
+            "message": f"Marked {marked_absent_count} employees as absent for {today}",
+            "date": str(today),
+            "weekday": weekday_name,
+            "absent_employees": absent_employees,
+            "total_checked": all_employees.count()
+        }, status=200)
+        
+    except Exception as e:
+        return JsonResponse({
+            "status": "error",
+            "message": str(e)
+        }, status=500)
+
+
 token_generator = PasswordResetTokenGenerator()
 
 # Helper function to send email asynchronously

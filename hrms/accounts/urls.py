@@ -12,7 +12,7 @@ from accounts.views import (
     get_employee_by_email, get_tasks_by_assigned_by, get_attendance, get_absent_employee,
     create_document, list_documents, get_document, update_document, delete_document,
     create_award, list_awards, get_award, update_award, delete_award,
-    attendance_page, mark_office_attendance_view, mark_work_attendance_view, RequestPasswordResetView, PasswordResetConfirmView,
+    attendance_page, mark_office_attendance_view, mark_work_attendance_view, mark_absent_employees, RequestPasswordResetView, PasswordResetConfirmView,
     appointment_letter, offer_letter, releaving_letter, bonafide_certificate, TicketViewSet, 
     HolidayViewSet, list_absent_employees, CareerViewSet, AppliedJobViewSet, 
     transfer_to_releaved, approve_releaved, list_releaved_employees, get_releaved_employee, ReleavedEmployeeViewSet
@@ -95,6 +95,7 @@ urlpatterns = [
     path('attendance/', attendance_page, name='attendance_page'),  # frontend page
     path('office_attendance/', mark_office_attendance_view, name='mark_office_attendance'),
     path('work_attendance/', mark_work_attendance_view, name='mark_work_attendance'),
+    path('mark_absent/', mark_absent_employees, name='mark_absent_employees'),
     path("today_attendance/", today_attendance, name="today_attendance"),
     path('list_attendance/', list_attendance, name='attendance-list'),
     path('get_attendance/<str:email>/', get_attendance, name='get_attendance'),
