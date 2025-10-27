@@ -2905,6 +2905,77 @@ Global Tech Software Solutions
         except Exception as e:
             print(f"Failed to send approval email to {email}: {str(e)}")
         
+        # Send notification to all CEOs and Managers about successful offboarding
+        try:
+            from accounts.models import CEO, Manager
+            
+            # Get all CEOs and Managers
+            ceos = CEO.objects.all()
+            managers = Manager.objects.all()
+            
+            # Prepare notification email for leadership
+            leadership_subject = f"Employee Offboarding Notification - {employee_name}"
+            
+            leadership_plain_message = f"""Dear Leadership,
+
+This is to inform you that an employee has been successfully offboarded from the organization.
+
+Employee Offboarding Details:
+- Name: {employee_name}
+- Designation: {designation}
+- Email: {email}
+- Department: {releaved.department or 'N/A'}
+- Offboarding Date: {offboarding_date_plain}
+{f'- Resignation Reason: {releaved.reason_for_resignation}' if releaved.reason_for_resignation else ''}
+
+Status: Approved and Offboarded
+
+{description if description else 'The employee has completed the offboarding process.'}
+
+This is an automated notification from the HR system.
+
+Best regards,
+HR Department
+Global Tech Software Solutions
+"""
+            
+            # Use template for HTML email
+            leadership_html_message = render_to_string('emails/employee_offboarded_leadership.html', {
+                'employee_name': employee_name,
+                'designation': designation,
+                'email': email,
+                'department': releaved.department or 'N/A',
+                'offboarding_date': offboarding_date,
+                'reason_for_resignation': releaved.reason_for_resignation,
+                'description': description,
+                'current_year': datetime.now().year
+            })
+            
+            # Send to all CEOs
+            for ceo in ceos:
+                try:
+                    Thread(
+                        target=send_email_async,
+                        args=(leadership_subject, leadership_plain_message, leadership_html_message, ceo.email.email)
+                    ).start()
+                except Exception as e:
+                    print(f"Failed to send offboarding notification to CEO {ceo.email.email}: {str(e)}")
+            
+            # Send to all Managers
+            for manager in managers:
+                try:
+                    Thread(
+                        target=send_email_async,
+                        args=(leadership_subject, leadership_plain_message, leadership_html_message, manager.email.email)
+                    ).start()
+                except Exception as e:
+                    print(f"Failed to send offboarding notification to Manager {manager.email.email}: {str(e)}")
+            
+            print(f"Offboarding notifications sent to {ceos.count()} CEOs and {managers.count()} Managers")
+            
+        except Exception as e:
+            print(f"Failed to send offboarding notifications to leadership: {str(e)}")
+        
         try:
             # Find and delete User by email string
             user = User.objects.filter(email=email).first()
@@ -2919,7 +2990,7 @@ Global Tech Software Solutions
             return Response({"error": f"Failed to delete related records: {str(e)}"}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
         return Response({
-            "message": f"{email} approval set to {approved}. Employee, EmployeeDetails, and User deleted. ReleavedEmployee preserved. Approval email sent."
+            "message": f"{email} approval set to {approved}. Employee, EmployeeDetails, and User deleted. ReleavedEmployee preserved. Approval email sent to employee and offboarding notifications sent to all CEOs and Managers."
         }, status=status.HTTP_200_OK)
     
     else:  # approved == 'no'
