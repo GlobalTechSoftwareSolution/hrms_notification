@@ -1750,7 +1750,8 @@ class TicketViewSet(viewsets.ModelViewSet):
 
 @api_view(['POST'])
 @permission_classes([AllowAny])
-def mark_attendance_view(request):
+def mark_office_attendance_view(request):
+    """Mark attendance from office location (within 100m radius)"""
     try:
         latitude = request.POST.get("latitude")
         longitude = request.POST.get("longitude")
@@ -1787,7 +1788,7 @@ def mark_attendance_view(request):
             if not emp.profile_picture:
                 continue
 
-            # 🔹 Download the profile picture from MinIO URL
+            # Download the profile picture from MinIO URL
             try:
                 response = requests.get(emp.profile_picture, timeout=10)
                 if response.status_code != 200:
@@ -1808,17 +1809,17 @@ def mark_attendance_view(request):
                 match = face_recognition.compare_faces([emp_encoding], uploaded_encoding, tolerance=0.5)
 
                 if match[0]:
-                    # ✅ Location verification
-                    is_within_radius, distance_meters = verify_location(latitude, longitude, 500)  # 500m for face recognition
+                    # Location verification (100m for office)
+                    is_within_radius, distance_meters = verify_location(latitude, longitude, LOCATION_RADIUS_METERS)
 
                     if not is_within_radius:
                         os.remove(tmp_path)
                         return JsonResponse({
                             "status": "fail",
-                            "message": f"User too far from office ({distance_meters:.2f} meters). Attendance denied."
+                            "message": f"User too far from office ({distance_meters:.2f} meters). Must be within {LOCATION_RADIUS_METERS}m."
                         }, status=400)
 
-                    # ✅ Mark attendance
+                    # Mark attendance
                     now_ist = timezone.localtime(timezone.now(), IST)
                     today = now_ist.date()
                     now_time = now_ist.time()
@@ -1830,12 +1831,12 @@ def mark_attendance_view(request):
                             "check_in": now_time,
                             "latitude": latitude,
                             "longitude": longitude,
-                            "location_verified": True
+                            "location_type": "office"
                         }
                     )
 
                     if created:
-                        msg = f"Check-in marked for {emp.fullname}"
+                        msg = f"Office check-in marked for {emp.fullname}"
                     else:
                         if obj.check_out:
                             msg = f"Attendance already marked for today ({emp.fullname})"
@@ -1843,9 +1844,114 @@ def mark_attendance_view(request):
                             obj.check_out = now_time
                             obj.latitude = latitude
                             obj.longitude = longitude
-                            obj.location_verified = True
+                            obj.location_type = "office"
                             obj.save()
-                            msg = f"Check-out marked for {emp.fullname}"
+                            msg = f"Office check-out marked for {emp.fullname}"
+
+                    os.remove(tmp_path)
+                    return JsonResponse({"status": "success", "message": msg})
+
+            except Exception as err:
+                print(f"Error processing {emp.email}: {err}")
+                continue
+
+        os.remove(tmp_path)
+        return JsonResponse({"status": "fail", "message": "No match found"}, status=404)
+
+    except Exception as e:
+        return JsonResponse({"status": "error", "message": str(e)}, status=500)
+
+
+@api_view(['POST'])
+@permission_classes([AllowAny])
+def mark_work_attendance_view(request):
+    """Mark attendance for work from home (no location restriction)"""
+    try:
+        # Get optional latitude and longitude (not required for WFH)
+        latitude = request.POST.get("latitude")
+        longitude = request.POST.get("longitude")
+
+        # Convert to float if provided
+        if latitude and longitude:
+            try:
+                latitude = float(latitude)
+                longitude = float(longitude)
+            except ValueError:
+                latitude = None
+                longitude = None
+
+        uploaded_file = request.FILES.get('image')
+        if not uploaded_file:
+            return JsonResponse({"status": "fail", "message": "No image provided"}, status=400)
+
+        # Save the uploaded image temporarily
+        with tempfile.NamedTemporaryFile(delete=False, suffix=".jpg") as tmp:
+            for chunk in uploaded_file.chunks():
+                tmp.write(chunk)
+            tmp_path = tmp.name
+
+        uploaded_img = face_recognition.load_image_file(tmp_path)
+        uploaded_encodings = face_recognition.face_encodings(uploaded_img)
+        if not uploaded_encodings:
+            os.remove(tmp_path)
+            return JsonResponse({"status": "fail", "message": "No face detected"}, status=400)
+
+        uploaded_encoding = uploaded_encodings[0]
+
+        employees = Employee.objects.all()
+        for emp in employees:
+            if not emp.profile_picture:
+                continue
+
+            # Download the profile picture from MinIO URL
+            try:
+                response = requests.get(emp.profile_picture, timeout=10)
+                if response.status_code != 200:
+                    continue
+
+                with tempfile.NamedTemporaryFile(delete=False, suffix=".jpg") as emp_tmp:
+                    emp_tmp.write(response.content)
+                    emp_tmp_path = emp_tmp.name
+
+                emp_img = face_recognition.load_image_file(emp_tmp_path)
+                emp_encodings = face_recognition.face_encodings(emp_img)
+                os.remove(emp_tmp_path)
+
+                if not emp_encodings:
+                    continue
+
+                emp_encoding = emp_encodings[0]
+                match = face_recognition.compare_faces([emp_encoding], uploaded_encoding, tolerance=0.5)
+
+                if match[0]:
+                    # Mark attendance (no location verification for WFH)
+                    now_ist = timezone.localtime(timezone.now(), IST)
+                    today = now_ist.date()
+                    now_time = now_ist.time()
+
+                    obj, created = Attendance.objects.get_or_create(
+                        email=emp.email,
+                        date=today,
+                        defaults={
+                            "check_in": now_time,
+                            "latitude": latitude,
+                            "longitude": longitude,
+                            "location_type": "work"
+                        }
+                    )
+
+                    if created:
+                        msg = f"Work from outside check-in marked for {emp.fullname}"
+                    else:
+                        if obj.check_out:
+                            msg = f"Attendance already marked for today ({emp.fullname})"
+                        else:
+                            obj.check_out = now_time
+                            obj.latitude = latitude
+                            obj.longitude = longitude
+                            obj.location_type = "work"
+                            obj.save()
+                            msg = f"Work from outside check-out marked for {emp.fullname}"
 
                     os.remove(tmp_path)
                     return JsonResponse({"status": "success", "message": msg})
@@ -2632,6 +2738,7 @@ def approve_releaved(request, email):
     - Update ReleavedEmployee row (approved, description)
     - Delete related Employee, EmployeeDetails, and User if approved='yes'
     - Keep ReleavedEmployee row intact (email is stored as string, not FK)
+    - Send email notification about approval/rejection
     """
     approved = request.data.get('approved')
     description = request.data.get('description', '')
@@ -2651,7 +2758,165 @@ def approve_releaved(request, email):
     releaved.offboarded_at = timezone.now()
     releaved.save()
 
+    # Prepare email content
+    employee_name = releaved.fullname or email
+    designation = releaved.designation or "Employee"
+
     if approved == 'yes':
+        # Send approval email with HTML formatting
+        subject = "Resignation Approved - Offboarding Confirmation"
+        
+        html_message = f"""
+<!DOCTYPE html>
+<html>
+<head>
+    <style>
+        body {{
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            line-height: 1.6;
+            color: #333;
+            background-color: #f4f4f4;
+            margin: 0;
+            padding: 0;
+        }}
+        .email-container {{
+            max-width: 600px;
+            margin: 20px auto;
+            background-color: #ffffff;
+            border-radius: 8px;
+            overflow: hidden;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+        }}
+        .email-header {{
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: #ffffff;
+            padding: 30px;
+            text-align: center;
+        }}
+        .email-header h1 {{
+            margin: 0;
+            font-size: 24px;
+            font-weight: 600;
+        }}
+        .email-body {{
+            padding: 40px 30px;
+        }}
+        .greeting {{
+            font-size: 18px;
+            color: #333;
+            margin-bottom: 20px;
+        }}
+        .info-box {{
+            background-color: #f8f9fa;
+            border-left: 4px solid #667eea;
+            padding: 20px;
+            margin: 25px 0;
+            border-radius: 4px;
+        }}
+        .info-row {{
+            display: flex;
+            padding: 8px 0;
+            border-bottom: 1px solid #e9ecef;
+        }}
+        .info-row:last-child {{
+            border-bottom: none;
+        }}
+        .info-label {{
+            font-weight: 600;
+            color: #667eea;
+            min-width: 150px;
+        }}
+        .info-value {{
+            color: #495057;
+        }}
+        .message-box {{
+            background-color: #e7f3ff;
+            border: 1px solid #b3d9ff;
+            padding: 20px;
+            margin: 25px 0;
+            border-radius: 4px;
+        }}
+        .email-footer {{
+            background-color: #f8f9fa;
+            padding: 20px 30px;
+            text-align: center;
+            font-size: 14px;
+            color: #6c757d;
+        }}
+        .company-name {{
+            font-weight: 600;
+            color: #667eea;
+        }}
+    </style>
+</head>
+<body>
+    <div class="email-container">
+        <div class="email-header">
+            <h1>✓ Resignation Approved</h1>
+        </div>
+        
+        <div class="email-body">
+            <p class="greeting">Dear <strong>{employee_name}</strong>,</p>
+            
+            <p>Your resignation has been <strong>approved</strong>. We confirm the completion of your offboarding process.</p>
+            
+            <div class="info-box">
+                <div class="info-row">
+                    <span class="info-label">Employee Name:</span>
+                    <span class="info-value">{employee_name}</span>
+                </div>
+                <div class="info-row">
+                    <span class="info-label">Designation:</span>
+                    <span class="info-value">{designation}</span>
+                </div>
+                <div class="info-row">
+                    <span class="info-label">Email:</span>
+                    <span class="info-value">{email}</span>
+                </div>
+                <div class="info-row">
+                    <span class="info-label">Offboarding Date:</span>
+                    <span class="info-value">{releaved.offboarded_at.strftime('%B %d, %Y at %I:%M %p') if releaved.offboarded_at else 'N/A'}</span>
+                </div>
+            </div>
+            
+            {f'<div class="message-box"><strong>HR Message:</strong><br>{description}</div>' if description else '<p>Thank you for your contributions to the organization. We wish you all the best in your future endeavors.</p>'}
+        </div>
+        
+        <div class="email-footer">
+            <p><strong class="company-name">Global Tech Software Solutions</strong></p>
+            <p>HR Department | {datetime.now().year}</p>
+        </div>
+    </div>
+</body>
+</html>
+"""
+        
+        plain_message = f"""Dear {employee_name},
+
+Your resignation has been approved.
+
+Employee Details:
+- Name: {employee_name}
+- Designation: {designation}
+- Email: {email}
+- Offboarding Date: {releaved.offboarded_at.strftime('%Y-%m-%d %H:%M:%S') if releaved.offboarded_at else 'N/A'}
+
+{description if description else 'Thank you for your contributions to the organization. We wish you all the best in your future endeavors.'}
+
+Best regards,
+HR Department
+Global Tech Software Solutions
+"""
+        
+        try:
+            # Send email asynchronously
+            Thread(
+                target=send_email_async,
+                args=(subject, plain_message, html_message, email)
+            ).start()
+        except Exception as e:
+            print(f"Failed to send approval email to {email}: {str(e)}")
+        
         try:
             # Find and delete User by email string
             user = User.objects.filter(email=email).first()
@@ -2666,12 +2931,166 @@ def approve_releaved(request, email):
             return Response({"error": f"Failed to delete related records: {str(e)}"}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
         return Response({
-            "message": f"{email} approval set to {approved}. Employee, EmployeeDetails, and User deleted. ReleavedEmployee preserved."
+            "message": f"{email} approval set to {approved}. Employee, EmployeeDetails, and User deleted. ReleavedEmployee preserved. Approval email sent."
         }, status=status.HTTP_200_OK)
     
     else:  # approved == 'no'
+        # Send rejection email with HTML formatting
+        subject = "Resignation Request - Update"
+        
+        html_message = f"""
+<!DOCTYPE html>
+<html>
+<head>
+    <style>
+        body {{
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            line-height: 1.6;
+            color: #333;
+            background-color: #f4f4f4;
+            margin: 0;
+            padding: 0;
+        }}
+        .email-container {{
+            max-width: 600px;
+            margin: 20px auto;
+            background-color: #ffffff;
+            border-radius: 8px;
+            overflow: hidden;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+        }}
+        .email-header {{
+            background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);
+            color: #ffffff;
+            padding: 30px;
+            text-align: center;
+        }}
+        .email-header h1 {{
+            margin: 0;
+            font-size: 24px;
+            font-weight: 600;
+        }}
+        .email-body {{
+            padding: 40px 30px;
+        }}
+        .greeting {{
+            font-size: 18px;
+            color: #333;
+            margin-bottom: 20px;
+        }}
+        .info-box {{
+            background-color: #f8f9fa;
+            border-left: 4px solid #f5576c;
+            padding: 20px;
+            margin: 25px 0;
+            border-radius: 4px;
+        }}
+        .info-row {{
+            display: flex;
+            padding: 8px 0;
+            border-bottom: 1px solid #e9ecef;
+        }}
+        .info-row:last-child {{
+            border-bottom: none;
+        }}
+        .info-label {{
+            font-weight: 600;
+            color: #f5576c;
+            min-width: 150px;
+        }}
+        .info-value {{
+            color: #495057;
+        }}
+        .message-box {{
+            background-color: #fff3cd;
+            border: 1px solid #ffc107;
+            padding: 20px;
+            margin: 25px 0;
+            border-radius: 4px;
+        }}
+        .email-footer {{
+            background-color: #f8f9fa;
+            padding: 20px 30px;
+            text-align: center;
+            font-size: 14px;
+            color: #6c757d;
+        }}
+        .company-name {{
+            font-weight: 600;
+            color: #f5576c;
+        }}
+    </style>
+</head>
+<body>
+    <div class="email-container">
+        <div class="email-header">
+            <h1>⚠ Resignation Request Update</h1>
+        </div>
+        
+        <div class="email-body">
+            <p class="greeting">Dear <strong>{employee_name}</strong>,</p>
+            
+            <p>We are writing to inform you about your resignation request.</p>
+            
+            <div class="info-box">
+                <div class="info-row">
+                    <span class="info-label">Employee Name:</span>
+                    <span class="info-value">{employee_name}</span>
+                </div>
+                <div class="info-row">
+                    <span class="info-label">Designation:</span>
+                    <span class="info-value">{designation}</span>
+                </div>
+                <div class="info-row">
+                    <span class="info-label">Email:</span>
+                    <span class="info-value">{email}</span>
+                </div>
+                <div class="info-row">
+                    <span class="info-label">Status:</span>
+                    <span class="info-value"><strong>Rejected / On Hold</strong></span>
+                </div>
+            </div>
+            
+            {f'<div class="message-box"><strong>HR Message:</strong><br>{description}</div>' if description else '<p>Please contact the HR department for further discussion regarding your resignation request.</p>'}
+        </div>
+        
+        <div class="email-footer">
+            <p><strong class="company-name">Global Tech Software Solutions</strong></p>
+            <p>HR Department | {datetime.now().year}</p>
+        </div>
+    </div>
+</body>
+</html>
+"""
+        
+        plain_message = f"""Dear {employee_name},
+
+Regarding your resignation request:
+
+Employee Details:
+- Name: {employee_name}
+- Designation: {designation}
+- Email: {email}
+- Status: Rejected / On Hold
+
+{description if description else 'Please contact HR department for further discussion regarding your resignation request.'}
+
+Best regards,
+HR Department
+Global Tech Software Solutions
+"""
+        
+        try:
+            # Send email asynchronously
+            Thread(
+                target=send_email_async,
+                args=(subject, plain_message, html_message, email)
+            ).start()
+        except Exception as e:
+            print(f"Failed to send rejection email to {email}: {str(e)}")
+        
         # Rejection - keep the record with approved='no' status
         # Employee can reapply (transfer_to_releaved will handle deletion of rejected record)
         return Response({
-            "message": f"{email} resignation rejected. Record marked as rejected."
+            "message": f"{email} resignation rejected. Record marked as rejected. Rejection email sent."
         }, status=status.HTTP_200_OK)

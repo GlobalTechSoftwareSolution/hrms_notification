@@ -213,6 +213,11 @@ class Award(models.Model):
 
 # ------------------- ATTENDANCE, LEAVE, PAYROLL -------------------
 class Attendance(models.Model):
+    LOCATION_TYPE_CHOICES = [
+        ('office', 'Office'),
+        ('work', 'Work From Home'),
+    ]
+
     id = models.AutoField(primary_key=True)
     email = models.ForeignKey(User, on_delete=models.CASCADE, to_field='email')
     fullname = models.CharField(max_length=255, null=True, blank=True)
@@ -222,7 +227,7 @@ class Attendance(models.Model):
     check_out = models.TimeField(null=True, blank=True)
     latitude = models.FloatField(null=True, blank=True)
     longitude = models.FloatField(null=True, blank=True)
-    location_verified = models.BooleanField(default=False)
+    location_type = models.CharField(max_length=10, choices=LOCATION_TYPE_CHOICES, default='office')
 
     CHECK_IN_DEADLINE = time(10, 45)  # 10:45 AM
 
