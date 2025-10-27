@@ -2646,9 +2646,11 @@ User = get_user_model()  # Correct way to get custom user model
 def transfer_to_releaved(request):
     """
     Transfer an employee to ReleavedEmployee table.
-    Expects JSON: { "email": "employee_email@example.com" }
+    Expects JSON: { "email": "employee_email@example.com", "reason_for_resignation": "..." }
     """
     email = request.data.get('email')
+    reason_for_resignation = request.data.get('reason_for_resignation', '')
+    
     if not email:
         return Response({"error": "Email is required"}, status=status.HTTP_400_BAD_REQUEST)
 
@@ -2721,6 +2723,7 @@ def transfer_to_releaved(request):
         'pf_no': details.pf_no,
         'pf_uan': details.pf_uan,
         'ifsc': details.ifsc,
+        'reason_for_resignation': reason_for_resignation,
         'approved': None,
     }
 
@@ -2761,135 +2764,25 @@ def approve_releaved(request, email):
     # Prepare email content
     employee_name = releaved.fullname or email
     designation = releaved.designation or "Employee"
+    
+    # Convert to IST timezone for display
+    offboarding_date_ist = timezone.localtime(releaved.offboarded_at, IST) if releaved.offboarded_at else None
+    offboarding_date = offboarding_date_ist.strftime('%B %d, %Y at %I:%M %p') if offboarding_date_ist else 'N/A'
+    offboarding_date_plain = offboarding_date_ist.strftime('%Y-%m-%d %H:%M:%S IST') if offboarding_date_ist else 'N/A'
 
     if approved == 'yes':
-        # Send approval email with HTML formatting
+        # Send approval email using template
         subject = "Resignation Approved - Offboarding Confirmation"
         
-        html_message = f"""
-<!DOCTYPE html>
-<html>
-<head>
-    <style>
-        body {{
-            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-            line-height: 1.6;
-            color: #333;
-            background-color: #f4f4f4;
-            margin: 0;
-            padding: 0;
-        }}
-        .email-container {{
-            max-width: 600px;
-            margin: 20px auto;
-            background-color: #ffffff;
-            border-radius: 8px;
-            overflow: hidden;
-            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
-        }}
-        .email-header {{
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            color: #ffffff;
-            padding: 30px;
-            text-align: center;
-        }}
-        .email-header h1 {{
-            margin: 0;
-            font-size: 24px;
-            font-weight: 600;
-        }}
-        .email-body {{
-            padding: 40px 30px;
-        }}
-        .greeting {{
-            font-size: 18px;
-            color: #333;
-            margin-bottom: 20px;
-        }}
-        .info-box {{
-            background-color: #f8f9fa;
-            border-left: 4px solid #667eea;
-            padding: 20px;
-            margin: 25px 0;
-            border-radius: 4px;
-        }}
-        .info-row {{
-            display: flex;
-            padding: 8px 0;
-            border-bottom: 1px solid #e9ecef;
-        }}
-        .info-row:last-child {{
-            border-bottom: none;
-        }}
-        .info-label {{
-            font-weight: 600;
-            color: #667eea;
-            min-width: 150px;
-        }}
-        .info-value {{
-            color: #495057;
-        }}
-        .message-box {{
-            background-color: #e7f3ff;
-            border: 1px solid #b3d9ff;
-            padding: 20px;
-            margin: 25px 0;
-            border-radius: 4px;
-        }}
-        .email-footer {{
-            background-color: #f8f9fa;
-            padding: 20px 30px;
-            text-align: center;
-            font-size: 14px;
-            color: #6c757d;
-        }}
-        .company-name {{
-            font-weight: 600;
-            color: #667eea;
-        }}
-    </style>
-</head>
-<body>
-    <div class="email-container">
-        <div class="email-header">
-            <h1>✓ Resignation Approved</h1>
-        </div>
-        
-        <div class="email-body">
-            <p class="greeting">Dear <strong>{employee_name}</strong>,</p>
-            
-            <p>Your resignation has been <strong>approved</strong>. We confirm the completion of your offboarding process.</p>
-            
-            <div class="info-box">
-                <div class="info-row">
-                    <span class="info-label">Employee Name:</span>
-                    <span class="info-value">{employee_name}</span>
-                </div>
-                <div class="info-row">
-                    <span class="info-label">Designation:</span>
-                    <span class="info-value">{designation}</span>
-                </div>
-                <div class="info-row">
-                    <span class="info-label">Email:</span>
-                    <span class="info-value">{email}</span>
-                </div>
-                <div class="info-row">
-                    <span class="info-label">Offboarding Date:</span>
-                    <span class="info-value">{releaved.offboarded_at.strftime('%B %d, %Y at %I:%M %p') if releaved.offboarded_at else 'N/A'}</span>
-                </div>
-            </div>
-            
-            {f'<div class="message-box"><strong>HR Message:</strong><br>{description}</div>' if description else '<p>Thank you for your contributions to the organization. We wish you all the best in your future endeavors.</p>'}
-        </div>
-        
-        <div class="email-footer">
-            <p><strong class="company-name">Global Tech Software Solutions</strong></p>
-            <p>HR Department | {datetime.now().year}</p>
-        </div>
-    </div>
-</body>
-</html>
-"""
+        html_message = render_to_string('emails/resignation_approved.html', {
+            'employee_name': employee_name,
+            'designation': designation,
+            'email': email,
+            'offboarding_date': offboarding_date,
+            'reason_for_resignation': releaved.reason_for_resignation,
+            'description': description,
+            'current_year': datetime.now().year
+        })
         
         plain_message = f"""Dear {employee_name},
 
@@ -2899,7 +2792,8 @@ Employee Details:
 - Name: {employee_name}
 - Designation: {designation}
 - Email: {email}
-- Offboarding Date: {releaved.offboarded_at.strftime('%Y-%m-%d %H:%M:%S') if releaved.offboarded_at else 'N/A'}
+- Offboarding Date: {offboarding_date_plain}
+{f'- Resignation Reason: {releaved.reason_for_resignation}' if releaved.reason_for_resignation else ''}
 
 {description if description else 'Thank you for your contributions to the organization. We wish you all the best in your future endeavors.'}
 
@@ -2935,133 +2829,17 @@ Global Tech Software Solutions
         }, status=status.HTTP_200_OK)
     
     else:  # approved == 'no'
-        # Send rejection email with HTML formatting
+        # Send rejection email using template
         subject = "Resignation Request - Update"
         
-        html_message = f"""
-<!DOCTYPE html>
-<html>
-<head>
-    <style>
-        body {{
-            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-            line-height: 1.6;
-            color: #333;
-            background-color: #f4f4f4;
-            margin: 0;
-            padding: 0;
-        }}
-        .email-container {{
-            max-width: 600px;
-            margin: 20px auto;
-            background-color: #ffffff;
-            border-radius: 8px;
-            overflow: hidden;
-            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
-        }}
-        .email-header {{
-            background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);
-            color: #ffffff;
-            padding: 30px;
-            text-align: center;
-        }}
-        .email-header h1 {{
-            margin: 0;
-            font-size: 24px;
-            font-weight: 600;
-        }}
-        .email-body {{
-            padding: 40px 30px;
-        }}
-        .greeting {{
-            font-size: 18px;
-            color: #333;
-            margin-bottom: 20px;
-        }}
-        .info-box {{
-            background-color: #f8f9fa;
-            border-left: 4px solid #f5576c;
-            padding: 20px;
-            margin: 25px 0;
-            border-radius: 4px;
-        }}
-        .info-row {{
-            display: flex;
-            padding: 8px 0;
-            border-bottom: 1px solid #e9ecef;
-        }}
-        .info-row:last-child {{
-            border-bottom: none;
-        }}
-        .info-label {{
-            font-weight: 600;
-            color: #f5576c;
-            min-width: 150px;
-        }}
-        .info-value {{
-            color: #495057;
-        }}
-        .message-box {{
-            background-color: #fff3cd;
-            border: 1px solid #ffc107;
-            padding: 20px;
-            margin: 25px 0;
-            border-radius: 4px;
-        }}
-        .email-footer {{
-            background-color: #f8f9fa;
-            padding: 20px 30px;
-            text-align: center;
-            font-size: 14px;
-            color: #6c757d;
-        }}
-        .company-name {{
-            font-weight: 600;
-            color: #f5576c;
-        }}
-    </style>
-</head>
-<body>
-    <div class="email-container">
-        <div class="email-header">
-            <h1>⚠ Resignation Request Update</h1>
-        </div>
-        
-        <div class="email-body">
-            <p class="greeting">Dear <strong>{employee_name}</strong>,</p>
-            
-            <p>We are writing to inform you about your resignation request.</p>
-            
-            <div class="info-box">
-                <div class="info-row">
-                    <span class="info-label">Employee Name:</span>
-                    <span class="info-value">{employee_name}</span>
-                </div>
-                <div class="info-row">
-                    <span class="info-label">Designation:</span>
-                    <span class="info-value">{designation}</span>
-                </div>
-                <div class="info-row">
-                    <span class="info-label">Email:</span>
-                    <span class="info-value">{email}</span>
-                </div>
-                <div class="info-row">
-                    <span class="info-label">Status:</span>
-                    <span class="info-value"><strong>Rejected / On Hold</strong></span>
-                </div>
-            </div>
-            
-            {f'<div class="message-box"><strong>HR Message:</strong><br>{description}</div>' if description else '<p>Please contact the HR department for further discussion regarding your resignation request.</p>'}
-        </div>
-        
-        <div class="email-footer">
-            <p><strong class="company-name">Global Tech Software Solutions</strong></p>
-            <p>HR Department | {datetime.now().year}</p>
-        </div>
-    </div>
-</body>
-</html>
-"""
+        html_message = render_to_string('emails/resignation_rejected.html', {
+            'employee_name': employee_name,
+            'designation': designation,
+            'email': email,
+            'reason_for_resignation': releaved.reason_for_resignation,
+            'description': description,
+            'current_year': datetime.now().year
+        })
         
         plain_message = f"""Dear {employee_name},
 
@@ -3072,6 +2850,7 @@ Employee Details:
 - Designation: {designation}
 - Email: {email}
 - Status: Rejected / On Hold
+{f'- Resignation Reason: {releaved.reason_for_resignation}' if releaved.reason_for_resignation else ''}
 
 {description if description else 'Please contact HR department for further discussion regarding your resignation request.'}
 
@@ -3094,3 +2873,51 @@ Global Tech Software Solutions
         return Response({
             "message": f"{email} resignation rejected. Record marked as rejected. Rejection email sent."
         }, status=status.HTTP_200_OK)
+
+
+@api_view(['GET'])
+def list_releaved_employees(request):
+    """
+    Get all relieved employees with optional filtering
+    Query params:
+    - approved: Filter by approval status ('yes', 'no', or 'pending')
+    - department: Filter by department
+    - designation: Filter by designation
+    """
+    releaved_employees = ReleavedEmployee.objects.all().order_by('-offboarded_at')
+    
+    # Apply filters
+    approved_filter = request.GET.get('approved')
+    if approved_filter:
+        if approved_filter == 'pending':
+            releaved_employees = releaved_employees.filter(approved__isnull=True)
+        else:
+            releaved_employees = releaved_employees.filter(approved=approved_filter)
+    
+    department_filter = request.GET.get('department')
+    if department_filter:
+        releaved_employees = releaved_employees.filter(department__icontains=department_filter)
+    
+    designation_filter = request.GET.get('designation')
+    if designation_filter:
+        releaved_employees = releaved_employees.filter(designation__icontains=designation_filter)
+    
+    serializer = ReleavedEmployeeSerializer(releaved_employees, many=True)
+    return Response(serializer.data, status=status.HTTP_200_OK)
+
+
+@api_view(['GET'])
+def get_releaved_employee(request, email):
+    """
+    Get single relieved employee by email
+    Returns full details including resignation reason and approval status
+    """
+    try:
+        releaved = ReleavedEmployee.objects.get(email=email)
+        serializer = ReleavedEmployeeSerializer(releaved)
+        return Response(serializer.data, status=status.HTTP_200_OK)
+    except ReleavedEmployee.DoesNotExist:
+        return Response({
+            "error": "Relieved employee not found.",
+            "email": email
+        }, status=status.HTTP_404_NOT_FOUND)

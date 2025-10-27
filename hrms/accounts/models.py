@@ -464,6 +464,7 @@ class ReleavedEmployee(models.Model):
     pf_no = models.CharField(max_length=50, null=True, blank=True)
     pf_uan = models.CharField(max_length=50, null=True, blank=True)
     ifsc = models.CharField(max_length=20, null=True, blank=True)
+    reason_for_resignation = models.TextField(null=True, blank=True)
     approved = models.CharField(max_length=10, null=True, blank=True)
     description = models.TextField(null=True, blank=True)
     offboarded_at = models.DateTimeField(default=timezone.now, null=True, blank=True)

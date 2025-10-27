@@ -15,7 +15,7 @@ from accounts.views import (
     attendance_page, mark_office_attendance_view, mark_work_attendance_view, RequestPasswordResetView, PasswordResetConfirmView,
     appointment_letter, offer_letter, releaving_letter, bonafide_certificate, TicketViewSet, 
     HolidayViewSet, list_absent_employees, CareerViewSet, AppliedJobViewSet, 
-    transfer_to_releaved, approve_releaved, ReleavedEmployeeViewSet
+    transfer_to_releaved, approve_releaved, list_releaved_employees, get_releaved_employee, ReleavedEmployeeViewSet
 )
 
 urlpatterns = [
@@ -122,6 +122,8 @@ urlpatterns = [
     path('careers/', CareerViewSet.as_view({'get': 'list', 'post': 'create'}), name='job-list'),
     path('careers/<int:id>/', CareerViewSet.as_view({'get': 'retrieve', 'patch': 'partial_update', 'delete': 'destroy'}), name='job-detail'),
 
+    path('list_releaved/', list_releaved_employees, name='list-releaved-employees'),
+    path('get_releaved/<str:email>/', get_releaved_employee, name='get-releaved-employee'),
     path('releaved/', transfer_to_releaved, name='transfer-to-releaved'),
     path('releaved/<str:email>/', approve_releaved, name='approve-releaved'),
 ]

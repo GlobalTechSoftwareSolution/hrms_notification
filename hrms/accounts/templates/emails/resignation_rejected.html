@@ -1,0 +1,135 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            line-height: 1.6;
+            color: #333;
+            background-color: #f4f4f4;
+            margin: 0;
+            padding: 0;
+        }
+        .email-container {
+            max-width: 600px;
+            margin: 20px auto;
+            background-color: #ffffff;
+            border-radius: 8px;
+            overflow: hidden;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+        }
+        .email-header {
+            background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);
+            color: #ffffff;
+            padding: 30px;
+            text-align: center;
+        }
+        .email-header h1 {
+            margin: 0;
+            font-size: 24px;
+            font-weight: 600;
+        }
+        .email-body {
+            padding: 40px 30px;
+        }
+        .greeting {
+            font-size: 18px;
+            color: #333;
+            margin-bottom: 20px;
+        }
+        .info-box {
+            background-color: #f8f9fa;
+            border-left: 4px solid #f5576c;
+            padding: 20px;
+            margin: 25px 0;
+            border-radius: 4px;
+        }
+        .info-row {
+            display: flex;
+            padding: 8px 0;
+            border-bottom: 1px solid #e9ecef;
+        }
+        .info-row:last-child {
+            border-bottom: none;
+        }
+        .info-label {
+            font-weight: 600;
+            color: #f5576c;
+            min-width: 150px;
+        }
+        .info-value {
+            color: #495057;
+        }
+        .message-box {
+            background-color: #fff3cd;
+            border: 1px solid #ffc107;
+            padding: 20px;
+            margin: 25px 0;
+            border-radius: 4px;
+        }
+        .email-footer {
+            background-color: #f8f9fa;
+            padding: 20px 30px;
+            text-align: center;
+            font-size: 14px;
+            color: #6c757d;
+        }
+        .company-name {
+            font-weight: 600;
+            color: #f5576c;
+        }
+    </style>
+</head>
+<body>
+    <div class="email-container">
+        <div class="email-header">
+            <h1>⚠ Resignation Request Update</h1>
+        </div>
+        
+        <div class="email-body">
+            <p class="greeting">Dear <strong>{{ employee_name }}</strong>,</p>
+            
+            <p>We are writing to inform you about your resignation request.</p>
+            
+            <div class="info-box">
+                <div class="info-row">
+                    <span class="info-label">Employee Name:</span>
+                    <span class="info-value">{{ employee_name }}</span>
+                </div>
+                <div class="info-row">
+                    <span class="info-label">Designation:</span>
+                    <span class="info-value">{{ designation }}</span>
+                </div>
+                <div class="info-row">
+                    <span class="info-label">Email:</span>
+                    <span class="info-value">{{ email }}</span>
+                </div>
+                <div class="info-row">
+                    <span class="info-label">Status:</span>
+                    <span class="info-value"><strong>Rejected / On Hold</strong></span>
+                </div>
+                {% if reason_for_resignation %}
+                <div class="info-row">
+                    <span class="info-label">Resignation Reason:</span>
+                    <span class="info-value">{{ reason_for_resignation }}</span>
+                </div>
+                {% endif %}
+            </div>
+            
+            {% if description %}
+            <div class="message-box">
+                <strong>HR Message:</strong><br>
+                {{ description }}
+            </div>
+            {% else %}
+            <p>Please contact the HR department for further discussion regarding your resignation request.</p>
+            {% endif %}
+        </div>
+        
+        <div class="email-footer">
+            <p><strong class="company-name">Global Tech Software Solutions</strong></p>
+            <p>HR Department | {{ current_year }}</p>
+        </div>
+    </div>
+</body>
+</html>
