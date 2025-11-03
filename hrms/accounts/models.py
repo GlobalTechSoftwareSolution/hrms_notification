@@ -460,13 +460,13 @@ class ReleavedEmployee(models.Model):
     pf_uan = models.CharField(max_length=50, null=True, blank=True)
     ifsc = models.CharField(max_length=20, null=True, blank=True)
     reason_for_resignation = models.TextField(null=True, blank=True)
-    # Two-stage approval process: Manager approval first, then HR approval
     manager_approved = models.CharField(max_length=10, null=True, blank=True)  # Values: 'Pending', 'Approved', 'Rejected'
     manager_description = models.TextField(null=True, blank=True)
     hr_approved = models.CharField(max_length=10, null=True, blank=True)  # Values: 'Pending', 'Approved', 'Rejected'
     hr_description = models.TextField(null=True, blank=True)
     ready_to_releve = models.BooleanField(default=False)  # Set to True only after HR approval is completed
-    offboarded_at = models.DateTimeField(default=timezone.now, null=True, blank=True)
+    applied_at = models.DateTimeField(default=timezone.now, null=True, blank=True)
+    offboarded_datetime = models.DateTimeField(null=True, blank=True)
 
     class Meta:
         db_table = 'accounts_releavedemployees'

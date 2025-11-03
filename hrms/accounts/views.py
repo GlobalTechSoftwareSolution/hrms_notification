@@ -585,7 +585,7 @@ class ReleavedEmployeeViewSet(viewsets.ModelViewSet):
     - Retrieve by email (string field, not FK)
     - Update approval status
     """
-    queryset = ReleavedEmployee.objects.all().order_by('-offboarded_at')
+    queryset = ReleavedEmployee.objects.all().order_by('-applied_at')
     serializer_class = ReleavedEmployeeSerializer
     lookup_field = 'email'  # Use email string as lookup
     
@@ -2777,14 +2777,21 @@ def transfer_to_releaved(request):
     # Rejected resignations (manager or HR) should allow new applications
     existing_releaved = ReleavedEmployee.objects.filter(email=email).first()
     if existing_releaved:
-        # If there's a pending or approved resignation, prevent duplicate
-        if existing_releaved.manager_approved == 'Pending' or existing_releaved.manager_approved == 'Approved':
-            status_msg = "pending manager approval" if existing_releaved.manager_approved == 'Pending' else "already in progress"
-            return Response({"message": f"{email} resignation is {status_msg}."}, status=status.HTTP_400_BAD_REQUEST)
-        elif existing_releaved.manager_approved == 'Rejected' or (existing_releaved.hr_approved == 'Rejected'):
-            # Allow reapplication if previous resignation was rejected
-            # We'll create a new record and keep the old one for audit purposes
-            pass  # Continue to create new record
+        # If HR already approved, final offboarding is handled in HR approve flow.
+        if existing_releaved.hr_approved == 'Approved':
+            return Response({
+                "message": f"{email} already HR-approved. Final offboarding is completed during HR approval process.",
+            }, status=status.HTTP_200_OK)
+
+        # If there's a pending flow, prevent duplicate submissions
+        if existing_releaved.manager_approved == 'Pending' or existing_releaved.manager_approved == 'Approved' or existing_releaved.hr_approved == 'Pending':
+            return Response({
+                "message": f"{email} resignation is in progress.",
+                "manager_approved": existing_releaved.manager_approved,
+                "hr_approved": existing_releaved.hr_approved
+            }, status=status.HTTP_400_BAD_REQUEST)
+
+        # If previously rejected at any stage, allow re-application by creating a new record
 
     # Create ReleavedEmployee with email as string
     data = {
@@ -2838,6 +2845,7 @@ def transfer_to_releaved(request):
         'manager_description': None,
         'hr_approved': None,  # Stage 2: Not yet reached
         'hr_description': None,
+        'applied_at': timezone.now(),
     }
 
     releaved = ReleavedEmployee.objects.create(**data)
@@ -2882,7 +2890,7 @@ def approve_releaved(request, pk):
     # Prepare email content variables
     employee_name = releaved.fullname or email
     designation = releaved.designation or "Employee"
-    offboarding_date_ist = timezone.localtime(releaved.offboarded_at, IST) if releaved.offboarded_at else None
+    offboarding_date_ist = timezone.localtime(releaved.applied_at, IST) if releaved.applied_at else None
     offboarding_date = offboarding_date_ist.strftime('%B %d, %Y at %I:%M %p') if offboarding_date_ist else 'N/A'
     offboarding_date_plain = offboarding_date_ist.strftime('%Y-%m-%d %H:%M:%S IST') if offboarding_date_ist else 'N/A'
 
@@ -2999,7 +3007,6 @@ Global Tech Software Solutions
         # Update HR approval fields
         releaved.hr_approved = approved
         releaved.hr_description = description
-        releaved.offboarded_at = timezone.now()
         
         # Set ready_to_releve flag to True only when HR approves
         if approved == 'Approved':
@@ -3008,10 +3015,13 @@ Global Tech Software Solutions
         releaved.save()
         
         if approved == 'Approved':
+            # Set final offboarding timestamp now
+            releaved.offboarded_datetime = timezone.now()
+            releaved.save(update_fields=["ready_to_releve", "hr_approved", "hr_description", "offboarded_datetime"])
             # Send approval email to employee
             subject = "Resignation Approved - Offboarding Confirmation"
             
-            offboarding_date_ist = timezone.localtime(releaved.offboarded_at, IST)
+            offboarding_date_ist = timezone.localtime(releaved.offboarded_datetime, IST)
             offboarding_date = offboarding_date_ist.strftime('%B %d, %Y at %I:%M %p')
             offboarding_date_plain = offboarding_date_ist.strftime('%Y-%m-%d %H:%M:%S IST')
             
@@ -3122,7 +3132,8 @@ Global Tech Software Solutions
                 return Response({"error": f"Failed to delete related records: {str(e)}"}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
             
             return Response({
-                "message": f"HR approved resignation for {email}. Employee offboarded successfully. Notifications sent."
+                "message": f"HR approved resignation for {email}. Employee offboarded successfully. Notifications sent.",
+                "offboarded_datetime": releaved.offboarded_datetime
             }, status=status.HTTP_200_OK)
         
         else:  # HR Rejected
@@ -3169,6 +3180,9 @@ Global Tech Software Solutions
             }, status=status.HTTP_200_OK)
 
 
+# (Removed separate endpoint for setting offboarded_datetime per user request)
+
+
 @api_view(['GET'])
 def list_releaved_employees(request):
     """
@@ -3179,7 +3193,7 @@ def list_releaved_employees(request):
     - department: Filter by department
     - designation: Filter by designation
     """
-    releaved_employees = ReleavedEmployee.objects.all().order_by('-offboarded_at')
+    releaved_employees = ReleavedEmployee.objects.all().order_by('-applied_at')
     
     # Apply filters for manager approval
     manager_approved_filter = request.GET.get('manager_approved')
