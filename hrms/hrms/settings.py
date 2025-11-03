@@ -17,15 +17,13 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 
 
 # SECURITY WARNING: keep the secret key used in production secret!
-SECRET_KEY = 'django-insecure-p%%sozx&%uf%86nn4crj^5dbyh5(oo+j)@u8oov^+vker+ub$m'
-# SECRET_KEY = os.getenv('DJANGO_SECRET_KEY')
+from decouple import config
+SECRET_KEY = config('DJANGO_SECRET_KEY')
 
 # SECURITY WARNING: don't run with debug turned on in production!
-DEBUG = True
-# DEBUG = os.getenv('DJANGO_DEBUG', 'False').lower() in ['true', '1', 't']
+DEBUG = config('DJANGO_DEBUG', default='False').lower() in ['true', '1', 't']
 
-ALLOWED_HOSTS = ["*"]
-# ALLOWED_HOSTS = os.getenv('DJANGO_ALLOWED_HOSTS', '').split(',')
+ALLOWED_HOSTS = [h for h in config('DJANGO_ALLOWED_HOSTS', default='*').split(',') if h]
 
 # Application definition
 
@@ -38,24 +36,9 @@ INSTALLED_APPS = [
     'django.contrib.staticfiles',
     'rest_framework',
     'corsheaders',
-    'channels',
-    'accounts.apps.AccountsConfig',  # Updated to use AppConfig for scheduler
-    # 'chat',
+    'accounts.apps.AccountsConfig', 
     'storages',
 ]
-
-ASGI_APPLICATION = "hrms.asgi.application"
-
-
-# Redis channel layer
-CHANNEL_LAYERS = {
-    "default": {
-        "BACKEND": "channels_redis.core.RedisChannelLayer",
-        "CONFIG": {
-            "hosts": [("127.0.0.1", 6379)],  # Redis must run on localhost
-        },
-    },
-}
 
 # Set custom user model
 AUTH_USER_MODEL = 'accounts.User'
@@ -100,26 +83,18 @@ MIDDLEWARE = [
 
 
 CORS_ALLOW_ALL_ORIGINS = False
-CORS_ALLOWED_ORIGINS = [
-    "http://localhost:3000",
-    "http://127.0.0.1:3000",
-    "http://127.0.0.1:8000",
-]
+CORS_ALLOWED_ORIGINS = [o for o in config('CORS_ALLOWED_ORIGINS', default='').split(',') if o]
 CORS_ALLOW_CREDENTIALS = True
 
 
 CORS_ALLOW_HEADERS = [
     'content-type',
     'accept',
-    'authorization',  # add this
+    'authorization',
 ]
 
 # CSRF trusted origins
-CSRF_TRUSTED_ORIGINS = [
-    "http://localhost:3000",
-    "http://localhost:8080",
-    "http://127.0.0.1:8000",
-]
+CSRF_TRUSTED_ORIGINS = [o for o in config('CSRF_TRUSTED_ORIGINS', default='').split(',') if o]
 
 ROOT_URLCONF = 'hrms.urls'
 
@@ -145,7 +120,6 @@ from pathlib import Path
 from django.urls import path
 import os 
 import dj_database_url
-from decouple import config
 
 DATABASES = {
     'default': dj_database_url.parse(str(config('DATABASE_URL', default='')))
@@ -185,7 +159,6 @@ USE_TZ = True
 # Static files (CSS, JavaScript, Images)
 # https://docs.djangoproject.com/en/5.2/howto/static-files/
 
-# STATIC_URL = 'static/'
 STATIC_URL = '/static/'
 STATIC_ROOT = os.path.join(BASE_DIR, 'staticfiles')
 
@@ -197,31 +170,31 @@ DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 
 import os
 
-# MEDIA_URL = '/media/'
-# MEDIA_ROOT = os.path.join(BASE_DIR, 'media')
+FRONTEND_URL = config('FRONTEND_URL', default='')
+DEFAULT_FROM_EMAIL = config('DEFAULT_FROM_EMAIL', default='')
 
-# MEDIA_URL = 'http://194.238.19.109:9000/hrms-media/'
-
-FRONTEND_URL = "https://globaltechsoftwaresolutions.cloud"
-DEFAULT_FROM_EMAIL = "no-reply@globaltechsoftwaresolutions.cloud"
-
-EMAIL_BACKEND = 'django.core.mail.backends.smtp.EmailBackend'
-EMAIL_HOST = 'smtp.gmail.com'
-EMAIL_PORT = 587
-EMAIL_USE_TLS = True
-EMAIL_HOST_USER = 'hrglobaltechsoftwaresolutions@gmail.com'
-EMAIL_HOST_PASSWORD = 'bxuw agmx ggiq nswv'  # use App Password, not your real password
-DEFAULT_FROM_EMAIL = EMAIL_HOST_USER
+EMAIL_BACKEND = config('EMAIL_BACKEND', default='django.core.mail.backends.smtp.EmailBackend')
+EMAIL_HOST = config('EMAIL_HOST', default='')
+EMAIL_PORT = int(config('EMAIL_PORT', default=587))
+EMAIL_USE_TLS = config('EMAIL_USE_TLS', default='True').lower() in ['true','1','t']
+EMAIL_HOST_USER = config('EMAIL_HOST_USER', default='')
+EMAIL_HOST_PASSWORD = config('EMAIL_HOST_PASSWORD', default='')
+if not DEFAULT_FROM_EMAIL:
+    DEFAULT_FROM_EMAIL = EMAIL_HOST_USER
 
 # --- MinIO (S3 Compatible) Storage Configuration ---
 MINIO_STORAGE = {
-    "ENDPOINT": "minio.globaltechsoftwaresolutions.cloud:9000",
-    "ACCESS_KEY": "admin",
-    "SECRET_KEY": "admin12345",
-    "BUCKET_NAME": "hrms-media",
-    "USE_SSL": True,  # HTTPS is now working
+    "ENDPOINT": config('MINIO_ENDPOINT'),
+    "ACCESS_KEY": config('MINIO_ACCESS_KEY'),
+    "SECRET_KEY": config('MINIO_SECRET_KEY'),
+    "BUCKET_NAME": config('MINIO_BUCKET_NAME'),
+    "USE_SSL": config('MINIO_USE_SSL', default='True').lower() in ['true','1','t'],
 }
-BASE_BUCKET_URL = "https://minio.globaltechsoftwaresolutions.cloud:9000/hrms-media/"
+BASE_BUCKET_URL = config('BASE_BUCKET_URL')
 
 LOGIN_URL = '/login/'        # or whatever your login route is
-LOGIN_REDIRECT_URL = '/chat/'  # redirect here after successful login
+LOGO_URL = config('LOGO_URL', default='')
+
+# Media files
+MEDIA_URL = config('MEDIA_URL', default='/media/')
+MEDIA_ROOT = os.path.join(BASE_DIR, 'media')

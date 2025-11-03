@@ -1,4 +1,4 @@
-import os, json, pytz, face_recognition, tempfile, requests, boto3, mimetypes
+import os, json, pytz, face_recognition, tempfile, requests, boto3
 
 from io import BytesIO
 from pathlib import Path
@@ -289,8 +289,8 @@ def handle_delete(request, ModelClass):
 
         # Delete associated image from MinIO if exists
         client = get_s3_client()
-        bucket_name = "hrms-media"
-        base_url = getattr(settings, "BASE_BUCKET_URL", f"https://minio.globaltechsoftwaresolutions.cloud/browser/hrms-media/")
+        bucket_name = settings.MINIO_STORAGE["BUCKET_NAME"]
+        base_url = settings.BASE_BUCKET_URL
 
         if hasattr(instance, "profile_picture") and instance.profile_picture:
             file_url = instance.profile_picture
@@ -334,24 +334,18 @@ class UserViewSet(viewsets.ModelViewSet):
 
 # ------------------- MinIO Client -------------------
 def get_s3_client():
-    minio_conf = getattr(settings, "MINIO_STORAGE", {
-        "ENDPOINT": "minio.globaltechsoftwaresolutions.cloud",
-        "ACCESS_KEY": "admin",
-        "SECRET_KEY": "admin12345",
-        "BUCKET_NAME": "hrms-media",
-        "USE_SSL": True,
-    })
+    minio_conf = settings.MINIO_STORAGE
     protocol = "https" if minio_conf.get("USE_SSL", False) else "http"
     client = boto3.client(
         "s3",
         endpoint_url=f"{protocol}://{minio_conf['ENDPOINT']}",
         aws_access_key_id=minio_conf["ACCESS_KEY"],
         aws_secret_access_key=minio_conf["SECRET_KEY"],
-        verify=True  # Use True for SSL verification
+        verify=True
     )
     return client
 
-BASE_BUCKET_URL = getattr(settings, "BASE_BUCKET_URL", "https://minio.globaltechsoftwaresolutions.cloud/hrms-media/")
+BASE_BUCKET_URL = settings.BASE_BUCKET_URL
 BUCKET_NAME = settings.MINIO_STORAGE["BUCKET_NAME"]
 
 # ------------------- Base ViewSet -------------------
@@ -541,7 +535,6 @@ class BaseUserViewSet(viewsets.ModelViewSet):
                     pass
             data.append(instance_data)
         return Response(data)
-
 
 
 # ------------------- Role-specific ViewSets -------------------
@@ -1407,7 +1400,7 @@ DOCUMENT_FIELDS = [
 ]
 
 # Use BASE_BUCKET_URL from settings.py
-BASE_BUCKET_URL = getattr(settings, "BASE_BUCKET_URL", "https://minio.globaltechsoftwaresolutions.cloud/browser/hrms-media/")
+BASE_BUCKET_URL = settings.BASE_BUCKET_URL
 
 @csrf_exempt
 def create_document(request):
@@ -1464,7 +1457,7 @@ def update_document(request, email):
 
     folder_name = email.split("@")[0].lower()
     client = get_s3_client()
-    bucket_name = "hrms-media"
+    bucket_name = settings.MINIO_STORAGE["BUCKET_NAME"]
     updated_files = {}
 
     for field in DOCUMENT_FIELDS:
@@ -1514,7 +1507,7 @@ def delete_document(request, email):
         return JsonResponse({"message": "No documents found for this user"}, status=404)
 
     client = get_s3_client()
-    bucket_name = "hrms-media"
+    bucket_name = settings.MINIO_STORAGE["BUCKET_NAME"]
     deleted_files = []
 
     for doc in documents:
@@ -2195,7 +2188,7 @@ def appointment_letter(request):
         'reporting_manager': (
             employee.reports_to.email if employee.reports_to else 'N/A'
         ),
-        'logo_url': 'https://www.globaltechsoftwaresolutions.com/_next/image?url=%2Flogo%2FGlobal.jpg&w=64&q=75',
+        'logo_url': getattr(settings, 'LOGO_URL', ''),
         'company_name': 'Global Tech Software Solutions',
         'salary': 'Confidential',
         'today_date': today.strftime('%d-%m-%Y'),
@@ -2223,14 +2216,16 @@ def appointment_letter(request):
     object_name = f"documents/{folder_name}/{filename}"
 
     try:
+        minio_conf = settings.MINIO_STORAGE
+        protocol = "https" if minio_conf.get("USE_SSL", False) else "http"
         s3 = boto3.client(
             's3',
-            endpoint_url='https://minio.globaltechsoftwaresolutions.cloud:9000',
-            aws_access_key_id='admin',
-            aws_secret_access_key='admin12345'
+            endpoint_url=f"{protocol}://{minio_conf['ENDPOINT']}",
+            aws_access_key_id=minio_conf['ACCESS_KEY'],
+            aws_secret_access_key=minio_conf['SECRET_KEY']
         )
 
-        bucket_name = 'hrms-media'
+        bucket_name = minio_conf['BUCKET_NAME']
         s3.upload_fileobj(
             pdf_minio,
             bucket_name,
@@ -2238,7 +2233,7 @@ def appointment_letter(request):
             ExtraArgs={'ContentType': 'application/pdf'}
         )
 
-        file_url = f"https://minio.globaltechsoftwaresolutions.cloud:9000/{bucket_name}/{object_name}"
+        file_url = f"{protocol}://{minio_conf['ENDPOINT']}/{bucket_name}/{object_name}"
 
         # Save the MinIO file URL to Document model
         document, _ = Document.objects.get_or_create(email=user)
@@ -2325,14 +2320,16 @@ def offer_letter(request):
     object_name = f"documents/{folder_name}/{filename}"
 
     try:
+        minio_conf = settings.MINIO_STORAGE
+        protocol = "https" if minio_conf.get("USE_SSL", False) else "http"
         s3 = boto3.client(
             's3',
-            endpoint_url='https://minio.globaltechsoftwaresolutions.cloud:9000',
-            aws_access_key_id='admin',
-            aws_secret_access_key='admin12345'
+            endpoint_url=f"{protocol}://{minio_conf['ENDPOINT']}",
+            aws_access_key_id=minio_conf['ACCESS_KEY'],
+            aws_secret_access_key=minio_conf['SECRET_KEY']
         )
 
-        bucket_name = 'hrms-media'
+        bucket_name = minio_conf['BUCKET_NAME']
         s3.upload_fileobj(
             pdf_minio,
             bucket_name,
@@ -2340,7 +2337,7 @@ def offer_letter(request):
             ExtraArgs={'ContentType': 'application/pdf'}
         )
 
-        file_url = f"https://minio.globaltechsoftwaresolutions.cloud:9000/{bucket_name}/{object_name}"
+        file_url = f"{protocol}://{minio_conf['ENDPOINT']}/{bucket_name}/{object_name}"
 
         # Save the MinIO file URL to Document model
         document, _ = Document.objects.get_or_create(email=user)
@@ -2425,16 +2422,18 @@ def releaving_letter(request):
     object_name = f"documents/{folder_name}/{filename}"
 
     try:
+        minio_conf = settings.MINIO_STORAGE
+        protocol = "https" if minio_conf.get("USE_SSL", False) else "http"
         s3 = boto3.client(
             's3',
-            endpoint_url='https://minio.globaltechsoftwaresolutions.cloud:9000',
-            aws_access_key_id='admin',
-            aws_secret_access_key='admin12345'
+            endpoint_url=f"{protocol}://{minio_conf['ENDPOINT']}",
+            aws_access_key_id=minio_conf['ACCESS_KEY'],
+            aws_secret_access_key=minio_conf['SECRET_KEY']
         )
-        bucket_name = 'hrms-media'
+        bucket_name = minio_conf['BUCKET_NAME']
         s3.upload_fileobj(pdf_minio, bucket_name, object_name, ExtraArgs={'ContentType': 'application/pdf'})
 
-        file_url = f"https://minio.globaltechsoftwaresolutions.cloud:9000/{bucket_name}/{object_name}"
+        file_url = f"{protocol}://{minio_conf['ENDPOINT']}/{bucket_name}/{object_name}"
 
         # Save URL to Document
         document, _ = Document.objects.get_or_create(email=user)
@@ -2522,14 +2521,16 @@ def bonafide_certificate(request):
     object_name = f"documents/{folder_name}/{filename}"
 
     try:
+        minio_conf = settings.MINIO_STORAGE
+        protocol = "https" if minio_conf.get("USE_SSL", False) else "http"
         s3 = boto3.client(
             's3',
-            endpoint_url='https://minio.globaltechsoftwaresolutions.cloud:9000',
-            aws_access_key_id='admin',
-            aws_secret_access_key='admin12345'
+            endpoint_url=f"{protocol}://{minio_conf['ENDPOINT']}",
+            aws_access_key_id=minio_conf['ACCESS_KEY'],
+            aws_secret_access_key=minio_conf['SECRET_KEY']
         )
 
-        bucket_name = 'hrms-media'
+        bucket_name = minio_conf['BUCKET_NAME']
         s3.upload_fileobj(
             pdf_minio,
             bucket_name,
@@ -2537,7 +2538,7 @@ def bonafide_certificate(request):
             ExtraArgs={'ContentType': 'application/pdf'}
         )
 
-        file_url = f"https://minio.globaltechsoftwaresolutions.cloud:9000/{bucket_name}/{object_name}"
+        file_url = f"{protocol}://{minio_conf['ENDPOINT']}/{bucket_name}/{object_name}"
 
         # Save URL to DB
         document, _ = Document.objects.get_or_create(email=user)

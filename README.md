@@ -64,7 +64,6 @@ The Global Tech HRMS Backend is a robust, scalable solution for managing all asp
 - **Database**: PostgreSQL (configured via dj_database_url)
 - **Authentication**: Django REST Framework Simple JWT
 - **Storage**: MinIO (S3 Compatible) for media files
-- **Caching**: Redis for channel layers
 - **Background Tasks**: APScheduler
 - **Email**: SMTP (Gmail)
 - **Frontend Integration**: CORS enabled for React/Vue applications
@@ -171,19 +170,43 @@ The system includes comprehensive email templates for all major events:
 ### Prerequisites
 - Python 3.8+
 - PostgreSQL database
-- Redis server
 - MinIO server for media storage
 
 ### Environment Variables
 ```bash
-DATABASE_URL=postgresql://user:password@host:port/database
+# Django
 DJANGO_SECRET_KEY=your-secret-key
 DJANGO_DEBUG=False
-MINIO_STORAGE_ENDPOINT=minio.yourdomain.com:9000
-MINIO_STORAGE_ACCESS_KEY=your-access-key
-MINIO_STORAGE_SECRET_KEY=your-secret-key
+DJANGO_ALLOWED_HOSTS=*
+
+# Database
+DATABASE_URL=postgresql://user:password@host:port/database
+
+# CORS/CSRF
+CORS_ALLOWED_ORIGINS=http://localhost:3000,http://127.0.0.1:3000
+CSRF_TRUSTED_ORIGINS=http://localhost:3000
+
+# Email (SMTP)
+EMAIL_BACKEND=django.core.mail.backends.smtp.EmailBackend
+EMAIL_HOST=smtp.gmail.com
+EMAIL_PORT=587
+EMAIL_USE_TLS=True
 EMAIL_HOST_USER=your-email@gmail.com
 EMAIL_HOST_PASSWORD=your-app-password
+DEFAULT_FROM_EMAIL=your-email@gmail.com
+FRONTEND_URL=https://your-frontend-domain
+LOGO_URL=https://your-logo-url
+
+# MinIO
+MINIO_ENDPOINT=minio.yourdomain.com:9000
+MINIO_ACCESS_KEY=your-access-key
+MINIO_SECRET_KEY=your-secret-key
+MINIO_BUCKET_NAME=hrms-media
+MINIO_USE_SSL=True
+BASE_BUCKET_URL=https://minio.yourdomain.com:9000/hrms-media/
+
+# Media
+MEDIA_URL=/media/
 ```
 
 ### Deployment Steps
@@ -194,7 +217,6 @@ EMAIL_HOST_PASSWORD=your-app-password
 
 ## 📈 Scalability Features
 
-- Redis channel layers for real-time communication
 - APScheduler for background task processing
 - Efficient database queries with proper indexing
 - Caching strategies for frequently accessed data
