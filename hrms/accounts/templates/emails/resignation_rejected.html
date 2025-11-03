@@ -55,7 +55,7 @@
         .info-label {
             font-weight: 600;
             color: #f5576c;
-            min-width: 150px;
+            min-width: 180px;
         }
         .info-value {
             color: #495057;
@@ -63,6 +63,13 @@
         .message-box {
             background-color: #fff3cd;
             border: 1px solid #ffc107;
+            padding: 20px;
+            margin: 25px 0;
+            border-radius: 4px;
+        }
+        .next-steps {
+            background-color: #e3f2fd;
+            border: 1px solid #90caf9;
             padding: 20px;
             margin: 25px 0;
             border-radius: 4px;
@@ -83,13 +90,13 @@
 <body>
     <div class="email-container">
         <div class="email-header">
-            <h1>⚠ Resignation Request Update</h1>
+            <h1>⚠ Resignation Request Rejected</h1>
         </div>
         
         <div class="email-body">
             <p class="greeting">Dear <strong>{{ employee_name }}</strong>,</p>
             
-            <p>We are writing to inform you about your resignation request.</p>
+            <p>We are writing to inform you that your resignation request has been <strong>rejected by HR</strong>.</p>
             
             <div class="info-box">
                 <div class="info-row">
@@ -124,6 +131,15 @@
             {% else %}
             <p>Please contact the HR department for further discussion regarding your resignation request.</p>
             {% endif %}
+            
+            <div class="next-steps">
+                <h3>Next Steps</h3>
+                <ul>
+                    <li>Schedule a meeting with your manager to discuss concerns</li>
+                    <li>Contact HR for policy clarification if needed</li>
+                    <li>Submit a revised resignation request if circumstances change</li>
+                </ul>
+            </div>
         </div>
         
         <div class="email-footer">

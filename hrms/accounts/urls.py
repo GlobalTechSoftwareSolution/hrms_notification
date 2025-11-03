@@ -87,9 +87,9 @@ urlpatterns = [
 
     path('create_award/', create_award, name='create_award'),
     path('list_awards/', list_awards, name='list_awards'),
-    path('get_award/<int:id>/', get_award, name='get_award'),
-    path('update_award/<int:id>/', update_award, name='update_award'),
-    path('delete_award/<int:id>/', delete_award, name='delete_award'),
+    path('get_award/<int:pk>/', get_award, name='get_award'),
+    path('update_award/<int:pk>/', update_award, name='update_award'),
+    path('delete_award/<int:pk>/', delete_award, name='delete_award'),
     
     path('employees/<str:email>/', get_employee_by_email, name='get_employee_by_email'),
     path('attendance/', attendance_page, name='attendance_page'),  # frontend page
@@ -124,7 +124,7 @@ urlpatterns = [
     path('careers/<int:id>/', CareerViewSet.as_view({'get': 'retrieve', 'patch': 'partial_update', 'delete': 'destroy'}), name='job-detail'),
 
     path('list_releaved/', list_releaved_employees, name='list-releaved-employees'),
-    path('get_releaved/<str:email>/', get_releaved_employee, name='get-releaved-employee'),
+    path('get_releaved/<int:pk>/', get_releaved_employee, name='get-releaved-employee'),
     path('releaved/', transfer_to_releaved, name='transfer-to-releaved'),
-    path('releaved/<str:email>/', approve_releaved, name='approve-releaved'),
+    path('releaved/<int:pk>/', approve_releaved, name='approve-releaved'),
 ]

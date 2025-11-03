@@ -3,105 +3,182 @@
 <head>
     <style>
         body {
-            font-family: Arial, sans-serif;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
             line-height: 1.6;
             color: #333;
+            background-color: #f4f4f4;
+            margin: 0;
+            padding: 0;
         }
-        .container {
+        .email-container {
             max-width: 600px;
-            margin: 0 auto;
-            padding: 20px;
-            background-color: #f9f9f9;
+            margin: 20px auto;
+            background-color: #ffffff;
+            border-radius: 8px;
+            overflow: hidden;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
         }
-        .header {
+        .email-header {
             background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            color: white;
+            color: #ffffff;
             padding: 30px;
             text-align: center;
-            border-radius: 10px 10px 0 0;
         }
-        .content {
-            background: white;
-            padding: 30px;
-            border-radius: 0 0 10px 10px;
-            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        .email-header h1 {
+            margin: 0;
+            font-size: 24px;
+            font-weight: 600;
+        }
+        .email-body {
+            padding: 40px 30px;
+        }
+        .greeting {
+            font-size: 18px;
+            color: #333;
+            margin-bottom: 20px;
         }
         .info-box {
             background-color: #f8f9fa;
-            padding: 20px;
             border-left: 4px solid #667eea;
-            margin: 20px 0;
+            padding: 20px;
+            margin: 25px 0;
+            border-radius: 4px;
         }
         .info-row {
-            margin: 10px 0;
+            display: flex;
+            padding: 8px 0;
+            border-bottom: 1px solid #e9ecef;
+        }
+        .info-row:last-child {
+            border-bottom: none;
         }
         .info-label {
-            font-weight: bold;
+            font-weight: 600;
             color: #667eea;
+            min-width: 180px;
         }
-        .status-approved {
-            color: #28a745;
-            font-weight: bold;
+        .info-value {
+            color: #495057;
         }
-        .footer {
+        .approval-stages {
+            background-color: #e8f5e9;
+            border: 1px solid #a5d6a7;
+            padding: 20px;
+            margin: 25px 0;
+            border-radius: 4px;
+        }
+        .stage {
+            display: flex;
+            align-items: center;
+            margin-bottom: 10px;
+        }
+        .stage:last-child {
+            margin-bottom: 0;
+        }
+        .stage-icon {
+            margin-right: 10px;
+            font-size: 18px;
+        }
+        .stage-approved {
+            color: #4caf50;
+            font-weight: 600;
+        }
+        .message-box {
+            background-color: #e3f2fd;
+            border: 1px solid #90caf9;
+            padding: 20px;
+            margin: 25px 0;
+            border-radius: 4px;
+        }
+        .email-footer {
+            background-color: #f8f9fa;
+            padding: 20px 30px;
             text-align: center;
-            margin-top: 20px;
-            font-size: 12px;
-            color: #666;
+            font-size: 14px;
+            color: #6c757d;
+        }
+        .company-name {
+            font-weight: 600;
+            color: #667eea;
         }
     </style>
 </head>
 <body>
-    <div class="container">
-        <div class="header">
-            <h2>🔔 Employee Offboarding Notification</h2>
+    <div class="email-container">
+        <div class="email-header">
+            <h1>🔔 Employee Offboarding Complete</h1>
         </div>
-        <div class="content">
-            <p>Dear Leadership,</p>
+        
+        <div class="email-body">
+            <p class="greeting">Dear Leadership,</p>
+            
             <p>This is to inform you that an employee has been successfully offboarded from the organization.</p>
             
             <div class="info-box">
-                <h3 style="margin-top: 0; color: #667eea;">Offboarding Details</h3>
                 <div class="info-row">
                     <span class="info-label">Employee Name:</span>
-                    <span>{{ employee_name }}</span>
+                    <span class="info-value">{{ employee_name }}</span>
                 </div>
                 <div class="info-row">
                     <span class="info-label">Designation:</span>
-                    <span>{{ designation }}</span>
+                    <span class="info-value">{{ designation }}</span>
                 </div>
                 <div class="info-row">
                     <span class="info-label">Email:</span>
-                    <span>{{ email }}</span>
+                    <span class="info-value">{{ email }}</span>
                 </div>
                 <div class="info-row">
                     <span class="info-label">Department:</span>
-                    <span>{{ department }}</span>
+                    <span class="info-value">{{ department }}</span>
                 </div>
                 <div class="info-row">
                     <span class="info-label">Offboarding Date:</span>
-                    <span>{{ offboarding_date }}</span>
+                    <span class="info-value">{{ offboarding_date }}</span>
                 </div>
                 {% if reason_for_resignation %}
                 <div class="info-row">
                     <span class="info-label">Resignation Reason:</span>
-                    <span>{{ reason_for_resignation }}</span>
+                    <span class="info-value">{{ reason_for_resignation }}</span>
                 </div>
                 {% endif %}
                 <div class="info-row">
                     <span class="info-label">Status:</span>
-                    <span class="status-approved">✓ Approved and Offboarded</span>
+                    <span class="info-value"><strong class="stage-approved">✓ Approved and Offboarded</strong></span>
+                </div>
+            </div>
+            
+            <div class="approval-stages">
+                <h3>Approval Stages Completed</h3>
+                <div class="stage">
+                    <span class="stage-icon">✓</span>
+                    <span class="stage-approved">Manager Approval: Approved</span>
+                </div>
+                <div class="stage">
+                    <span class="stage-icon">✓</span>
+                    <span class="stage-approved">HR Approval: Approved</span>
                 </div>
             </div>
             
             {% if description %}
-            <p><strong>Additional Notes:</strong><br>{{ description }}</p>
+            <div class="message-box">
+                <strong>Approval Comments:</strong><br>
+                {{ description }}
+            </div>
             {% endif %}
+            
+            <p><strong>Post-Offboarding Actions:</strong></p>
+            <ul>
+                <li>All system access has been revoked</li>
+                <li>Final settlement processing initiated</li>
+                <li>Knowledge transfer completed</li>
+            </ul>
             
             <p style="margin-top: 20px;">This is an automated notification from the HR system.</p>
         </div>
-        <div class="footer">
-            <p>© {{ current_year }} Global Tech Software Solutions. All rights reserved.</p>
+        
+        <div class="email-footer">
+            <p><strong class="company-name">Global Tech Software Solutions</strong></p>
+            <p>HR Department | {{ current_year }}</p>
         </div>
     </div>
 </body>

@@ -331,21 +331,6 @@ class UserViewSet(viewsets.ModelViewSet):
             return UserRegistrationSerializer
         return UserSerializer
 
-# ------------------- S3 Client -------------------
-# ------------------- MinIO Client -------------------
-
-import json
-import boto3
-from django.conf import settings
-from rest_framework import viewsets
-from rest_framework.response import Response
-from django.contrib.auth import get_user_model
-from django.shortcuts import get_object_or_404
-
-from .models import Employee, EmployeeDetails, HR, Manager, Admin, CEO
-from .serializers import EmployeeSerializer, HRSerializer, ManagerSerializer, AdminSerializer, CEOSerializer
-
-User = get_user_model()
 
 # ------------------- MinIO Client -------------------
 def get_s3_client():
@@ -489,16 +474,7 @@ class BaseUserViewSet(viewsets.ModelViewSet):
             else:
                 email_str = employee.email
 
-            # 3️⃣ Create ReleavedEmployee entry with plain email
-            # ReleavedEmployee.objects.create(
-            #     email=email_str,
-            #     fullname=getattr(employee, "fullname", None),
-            #     phone=getattr(employee, "phone", None),
-            #     designation=getattr(employee, "designation", None),
-            #     role="employee"  # explicitly set which table they came from
-            # )
-
-            # 4️⃣ Delete related EmployeeDetails
+            # 3️⃣ Delete related EmployeeDetails
             try:
                 user_obj = User.objects.filter(email=email_str).first()
                 if user_obj:
@@ -506,7 +482,7 @@ class BaseUserViewSet(viewsets.ModelViewSet):
             except Exception as e:
                 print(f"[WARN] Error deleting EmployeeDetails: {e}")
 
-            # 5️⃣ Delete profile picture from MinIO
+            # 4️⃣ Delete profile picture from MinIO
             if hasattr(employee, "profile_picture") and employee.profile_picture:
                 client = get_s3_client()
                 key = employee.profile_picture.replace(BASE_BUCKET_URL, "")
@@ -515,7 +491,7 @@ class BaseUserViewSet(viewsets.ModelViewSet):
                 except Exception as e:
                     print(f"[WARN] Failed to delete profile picture from MinIO: {e}")
 
-            # 6️⃣ Delete main Employee and related User safely
+            # 5️⃣ Delete main Employee and related User safely
             employee.delete()
             user = User.objects.filter(email=email_str).first()
             if user:
@@ -1424,16 +1400,6 @@ def get_tasks_by_assigned_by(request, assigned_by_email):
         return JsonResponse({"error": str(e)}, status=500)
     
 
-import boto3
-from django.views.decorators.csrf import csrf_exempt
-from django.http import JsonResponse
-from django.shortcuts import get_object_or_404
-from django.conf import settings
-from django.http.multipartparser import MultiPartParser, MultiPartParserError
-from .models import Document, User  # adjust import if needed
-
-
-
 DOCUMENT_FIELDS = [
     "tenth", "twelth", "degree", "masters", "marks_card", "certificates",
     "award", "resume", "id_proof", "appointment_letter", "offer_letter",
@@ -1644,44 +1610,44 @@ def create_award(request):
 
 
 @csrf_exempt
-def update_award(request, id):
-    if request.method in ["POST", "PATCH"]:
-        award = get_object_or_404(Award, id=id)
+@require_http_methods(["POST", "PATCH"])
+def update_award(request, pk):
+    award = get_object_or_404(Award, id=pk)
 
-        # Handle JSON or form data
-        if request.content_type == "application/json":
-            import json
-            data = json.loads(request.body)
-        else:
-            data = request.POST
+    # Handle JSON or form data
+    if request.content_type == "application/json":
+        import json
+        data = json.loads(request.body)
+    else:
+        data = request.POST
 
-        # Update text fields
-        for field in ["title", "description"]:
-            value = data.get(field)
-            if value:
-                setattr(award, field, value)
+    # Update text fields
+    for field in ["title", "description"]:
+        value = data.get(field)
+        if value:
+            setattr(award, field, value)
 
-        # Update photo in MinIO
-        photo_file = request.FILES.get("photo")
-        if photo_file:
-            client = get_s3_client()
-            extension = photo_file.name.split('.')[-1]
-            key = f'awards/{award.id}.{extension}'
+    # Update photo in MinIO
+    photo_file = request.FILES.get("photo")
+    if photo_file:
+        client = get_s3_client()
+        extension = photo_file.name.split('.')[-1]
+        key = f'awards/{award.id}.{extension}'
 
-            # Delete old photo if exists
-            if award.photo and award.photo.startswith(BASE_BUCKET_URL):
-                old_key = award.photo.replace(BASE_BUCKET_URL, "")
-                try:
-                    client.delete_object(Bucket=BUCKET_NAME, Key=old_key)
-                except Exception as e:
-                    print(f"Failed to delete old photo: {e}")
+        # Delete old photo if exists
+        if award.photo and award.photo.startswith(BASE_BUCKET_URL):
+            old_key = award.photo.replace(BASE_BUCKET_URL, "")
+            try:
+                client.delete_object(Bucket=BUCKET_NAME, Key=old_key)
+            except Exception as e:
+                print(f"Failed to delete old photo: {e}")
 
-            # Upload new photo
-            client.upload_fileobj(photo_file, BUCKET_NAME, key, ExtraArgs={"ContentType": photo_file.content_type})
-            award.photo = f"{BASE_BUCKET_URL}{key}"
+        # Upload new photo
+        client.upload_fileobj(photo_file, BUCKET_NAME, key, ExtraArgs={"ContentType": photo_file.content_type})
+        award.photo = f"{BASE_BUCKET_URL}{key}"
 
-        award.save()
-        return JsonResponse({"message": "Award updated"})
+    award.save()
+    return JsonResponse({"message": "Award updated"})
 
 
 def list_awards(request):
@@ -1699,8 +1665,8 @@ def list_awards(request):
     return JsonResponse(data, safe=False)
 
 
-def get_award(request, id):
-    a = get_object_or_404(Award, id=id)
+def get_award(request, pk):
+    a = get_object_or_404(Award, id=pk)
     data = {
         "id": a.id,
         "email": a.email.email,
@@ -1712,10 +1678,9 @@ def get_award(request, id):
     return JsonResponse(data)
 
 
-@csrf_exempt
-def delete_award(request, id):
+def delete_award(request, pk):
     if request.method == "DELETE":
-        award = get_object_or_404(Award, id=id)
+        award = get_object_or_404(Award, id=pk)
         client = get_s3_client()
 
         # Delete photo from MinIO if it exists
@@ -1746,6 +1711,11 @@ class TicketViewSet(viewsets.ModelViewSet):
     # Optional: filter tickets by assigned_to if needed
     def get_queryset(self):
         return Ticket.objects.all()
+
+
+IST = timezone.get_fixed_timezone(330)  # IST is UTC+5:30
+CHECK_IN_DEADLINE = time(10, 45)  # 10:45 AM
+LOCATION_RADIUS_METERS = 100  # 100 meters
 
 
 @api_view(['POST'])
@@ -1782,6 +1752,31 @@ def mark_office_attendance_view(request):
             return JsonResponse({"status": "fail", "message": "No face detected"}, status=400)
 
         uploaded_encoding = uploaded_encodings[0]
+
+        # Check if current time is past 10:45 AM deadline
+        now_ist = timezone.localtime(timezone.now(), IST)
+        today = now_ist.date()
+        current_time = now_ist.time()
+        
+        # Check if today is Sunday or a holiday (same logic as scheduler)
+        if today.weekday() == 6:  # Sunday = 6
+            # Allow check-ins on Sundays since it's a working day
+            pass
+        else:
+            # Check if today is a holiday
+            from accounts.models import Holiday
+            is_holiday = Holiday.objects.filter(date=today).exists()
+            if is_holiday:
+                # Allow check-ins on holidays since they are working days
+                pass
+            else:
+                # Only enforce deadline on regular weekdays (Monday to Saturday)
+                if current_time > CHECK_IN_DEADLINE:
+                    os.remove(tmp_path)
+                    return JsonResponse({
+                        "status": "fail", 
+                        "message": "Check-in time expired. Cannot check in after 10:45 AM IST."
+                    }, status=400)
 
         employees = Employee.objects.all()
         for emp in employees:
@@ -1897,6 +1892,31 @@ def mark_work_attendance_view(request):
             return JsonResponse({"status": "fail", "message": "No face detected"}, status=400)
 
         uploaded_encoding = uploaded_encodings[0]
+
+        # Check if current time is past 10:45 AM deadline
+        now_ist = timezone.localtime(timezone.now(), IST)
+        today = now_ist.date()
+        current_time = now_ist.time()
+        
+        # Check if today is Sunday or a holiday (same logic as scheduler)
+        if today.weekday() == 6:  # Sunday = 6
+            # Allow check-ins on Sundays since it's a working day
+            pass
+        else:
+            # Check if today is a holiday
+            from accounts.models import Holiday
+            is_holiday = Holiday.objects.filter(date=today).exists()
+            if is_holiday:
+                # Allow check-ins on holidays since they are working days
+                pass
+            else:
+                # Only enforce deadline on regular weekdays (Monday to Saturday)
+                if current_time > CHECK_IN_DEADLINE:
+                    os.remove(tmp_path)
+                    return JsonResponse({
+                        "status": "fail", 
+                        "message": "Check-in time expired. Cannot check in after 10:45 AM IST."
+                    }, status=400)
 
         employees = Employee.objects.all()
         for emp in employees:
@@ -2726,14 +2746,6 @@ Global Tech Software Solutions
         instance.delete()
         return Response({"message": f"Application for {email} deleted."}, status=status.HTTP_200_OK)
  
-from django.views.decorators.csrf import csrf_exempt
-from rest_framework.decorators import api_view
-from rest_framework.response import Response
-from rest_framework import status
-from django.contrib.auth import get_user_model
-from .models import Employee, EmployeeDetails, ReleavedEmployee
-
-User = get_user_model()  # Correct way to get custom user model
 
 @csrf_exempt
 @api_view(['POST'])
@@ -2760,15 +2772,18 @@ def transfer_to_releaved(request):
         return Response({"error": "EmployeeDetails not found"}, status=status.HTTP_404_NOT_FOUND)
 
     # Check if already exists in ReleavedEmployee (by email string)
+    # Only prevent reapplication if there's a pending or approved resignation
+    # Rejected resignations (manager or HR) should allow new applications
     existing_releaved = ReleavedEmployee.objects.filter(email=email).first()
     if existing_releaved:
-        # If previous resignation was rejected (approved='no'), delete it and allow reapplication
-        if existing_releaved.approved == 'no':
-            existing_releaved.delete()
-        # If still pending (approved=None) or approved='yes', prevent duplicate
-        elif existing_releaved.approved in [None, 'yes']:
-            status_msg = "pending approval" if existing_releaved.approved is None else "already approved"
+        # If there's a pending or approved resignation, prevent duplicate
+        if existing_releaved.manager_approved == 'Pending' or existing_releaved.manager_approved == 'Approved':
+            status_msg = "pending manager approval" if existing_releaved.manager_approved == 'Pending' else "already in progress"
             return Response({"message": f"{email} resignation is {status_msg}."}, status=status.HTTP_400_BAD_REQUEST)
+        elif existing_releaved.manager_approved == 'Rejected' or (existing_releaved.hr_approved == 'Rejected'):
+            # Allow reapplication if previous resignation was rejected
+            # We'll create a new record and keep the old one for audit purposes
+            pass  # Continue to create new record
 
     # Create ReleavedEmployee with email as string
     data = {
@@ -2818,69 +2833,195 @@ def transfer_to_releaved(request):
         'pf_uan': details.pf_uan,
         'ifsc': details.ifsc,
         'reason_for_resignation': reason_for_resignation,
-        'approved': None,
+        'manager_approved': 'Pending',  # Stage 1: Pending manager approval
+        'manager_description': None,
+        'hr_approved': None,  # Stage 2: Not yet reached
+        'hr_description': None,
     }
 
     releaved = ReleavedEmployee.objects.create(**data)
 
-    return Response({"message": f"{email} transferred to ReleavedEmployee."}, status=status.HTTP_201_CREATED)
+    return Response({"message": f"{email} transferred to ReleavedEmployee.", "id": releaved.id}, status=status.HTTP_201_CREATED)
 
 
 
 @csrf_exempt
+@permission_classes([AllowAny])
 @api_view(['PATCH'])
-def approve_releaved(request, email):
+def approve_releaved(request, pk):
     """
-    Approve a releaved employee:
-    - Update ReleavedEmployee row (approved, description)
-    - Delete related Employee, EmployeeDetails, and User if approved='yes'
-    - Keep ReleavedEmployee row intact (email is stored as string, not FK)
-    - Send email notification about approval/rejection
+    Two-stage approval for releaved employee:
+    Stage 1 (Manager): 
+        - Update manager_approved ('Approved' or 'Rejected')
+        - Update manager_description
+        - If approved, set hr_approved to 'Pending'
+    Stage 2 (HR):
+        - Update hr_approved ('Approved' or 'Rejected')
+        - Update hr_description
+        - If approved, delete Employee, EmployeeDetails, and User
+    - Send email notifications
     """
-    approved = request.data.get('approved')
+    approval_stage = request.data.get('approval_stage')  # 'manager' or 'hr'
+    approved = request.data.get('approved')  # 'Approved' or 'Rejected'
     description = request.data.get('description', '')
 
-    if approved not in ['yes', 'no']:
-        return Response({"error": "approved must be 'yes' or 'no'."}, status=status.HTTP_400_BAD_REQUEST)
+    if approval_stage not in ['manager', 'hr']:
+        return Response({"error": "approval_stage must be 'manager' or 'hr'."}, status=status.HTTP_400_BAD_REQUEST)
+    
+    if approved not in ['Approved', 'Rejected']:
+        return Response({"error": "approved must be 'Approved' or 'Rejected'."}, status=status.HTTP_400_BAD_REQUEST)
 
     try:
-        # Use email string lookup instead of email__email
-        releaved = ReleavedEmployee.objects.get(email=email)
+        # Use ID lookup instead of email
+        releaved = ReleavedEmployee.objects.get(id=pk)
+        email = releaved.email  # Get email for notifications
     except ReleavedEmployee.DoesNotExist:
         return Response({"error": "ReleavedEmployee not found."}, status=status.HTTP_404_NOT_FOUND)
 
-    # Update the ReleavedEmployee row
-    releaved.approved = approved
-    releaved.description = description
-    releaved.offboarded_at = timezone.now()
-    releaved.save()
-
-    # Prepare email content
+    # Prepare email content variables
     employee_name = releaved.fullname or email
     designation = releaved.designation or "Employee"
-    
-    # Convert to IST timezone for display
     offboarding_date_ist = timezone.localtime(releaved.offboarded_at, IST) if releaved.offboarded_at else None
     offboarding_date = offboarding_date_ist.strftime('%B %d, %Y at %I:%M %p') if offboarding_date_ist else 'N/A'
     offboarding_date_plain = offboarding_date_ist.strftime('%Y-%m-%d %H:%M:%S IST') if offboarding_date_ist else 'N/A'
 
-    if approved == 'yes':
-        # Send approval email using template
-        subject = "Resignation Approved - Offboarding Confirmation"
+    # ============ STAGE 1: Manager Approval ============
+    if approval_stage == 'manager':
+        if releaved.manager_approved in ['Approved', 'Rejected']:
+            return Response({
+                "error": f"Manager has already {releaved.manager_approved.lower()} this resignation."
+            }, status=status.HTTP_400_BAD_REQUEST)
         
-        html_message = render_to_string('emails/resignation_approved.html', {
-            'employee_name': employee_name,
-            'designation': designation,
-            'email': email,
-            'offboarding_date': offboarding_date,
-            'reason_for_resignation': releaved.reason_for_resignation,
-            'description': description,
-            'current_year': datetime.now().year
-        })
+        # Update manager approval fields
+        releaved.manager_approved = approved
+        releaved.manager_description = description
         
-        plain_message = f"""Dear {employee_name},
+        if approved == 'Approved':
+            # Move to Stage 2: Set HR approval as Pending
+            releaved.hr_approved = 'Pending'
+            releaved.save()
+            
+            # Send email to employee about manager approval
+            subject = "Resignation - Manager Approved - Awaiting HR Approval"
+            html_message = render_to_string('emails/resignation_manager_approved.html', {
+                'employee_name': employee_name,
+                'designation': designation,
+                'email': email,
+                'reason_for_resignation': releaved.reason_for_resignation,
+                'description': description,
+                'current_year': datetime.now().year
+            })
+            
+            plain_message = f"""Dear {employee_name},
 
-Your resignation has been approved.
+Your resignation has been approved by your manager and is now pending HR approval.
+
+Employee Details:
+- Name: {employee_name}
+- Designation: {designation}
+- Email: {email}
+{f'- Resignation Reason: {releaved.reason_for_resignation}' if releaved.reason_for_resignation else ''}
+
+Manager Comments: {description if description else 'No additional comments.'}
+
+The HR department will review your resignation shortly.
+
+Best regards,
+HR Department
+Global Tech Software Solutions
+"""
+            
+            try:
+                Thread(target=send_email_async, args=(subject, plain_message, html_message, email)).start()
+            except Exception as e:
+                print(f"Failed to send manager approval email to {email}: {str(e)}")
+            
+            return Response({
+                "message": f"Manager approved resignation for {email}. Now pending HR approval. Email notification sent."
+            }, status=status.HTTP_200_OK)
+        
+        else:  # Manager Rejected
+            # Update the record to show it was rejected but keep it for audit purposes
+            releaved.manager_approved = 'Rejected'
+            releaved.manager_description = description
+            releaved.save()
+            
+            # Send rejection email
+            subject = "Resignation Request - Manager Rejected"
+            html_message = render_to_string('emails/resignation_manager_rejected.html', {
+                'employee_name': employee_name,
+                'designation': designation,
+                'email': email,
+                'reason_for_resignation': releaved.reason_for_resignation,
+                'description': description,
+                'current_year': datetime.now().year
+            })
+            
+            plain_message = f"""Dear {employee_name},
+
+Your resignation has been rejected by your manager.
+
+Employee Details:
+- Name: {employee_name}
+- Designation: {designation}
+- Email: {email}
+{f'- Resignation Reason: {releaved.reason_for_resignation}' if releaved.reason_for_resignation else ''}
+
+Manager Comments: {description if description else 'Please contact your manager for further discussion.'}
+
+Best regards,
+HR Department
+Global Tech Software Solutions
+"""
+            
+            try:
+                Thread(target=send_email_async, args=(subject, plain_message, html_message, email)).start()
+            except Exception as e:
+                print(f"Failed to send manager rejection email to {email}: {str(e)}")
+            
+            return Response({
+                "message": f"Manager rejected resignation for {email}. Rejection email sent. Employee can now submit a new application."
+            }, status=status.HTTP_200_OK)
+    
+    # ============ STAGE 2: HR Approval ============
+    elif approval_stage == 'hr':
+        if releaved.manager_approved != 'Approved':
+            return Response({
+                "error": "Cannot process HR approval. Manager approval is required first."
+            }, status=status.HTTP_400_BAD_REQUEST)
+        
+        if releaved.hr_approved in ['Approved', 'Rejected']:
+            return Response({
+                "error": f"HR has already {releaved.hr_approved.lower()} this resignation."
+            }, status=status.HTTP_400_BAD_REQUEST)
+        
+        # Update HR approval fields
+        releaved.hr_approved = approved
+        releaved.hr_description = description
+        releaved.offboarded_at = timezone.now()
+        releaved.save()
+        
+        if approved == 'Approved':
+            # Send approval email to employee
+            subject = "Resignation Approved - Offboarding Confirmation"
+            
+            offboarding_date_ist = timezone.localtime(releaved.offboarded_at, IST)
+            offboarding_date = offboarding_date_ist.strftime('%B %d, %Y at %I:%M %p')
+            offboarding_date_plain = offboarding_date_ist.strftime('%Y-%m-%d %H:%M:%S IST')
+            
+            html_message = render_to_string('emails/resignation_approved.html', {
+                'employee_name': employee_name,
+                'designation': designation,
+                'email': email,
+                'offboarding_date': offboarding_date,
+                'reason_for_resignation': releaved.reason_for_resignation,
+                'description': description,
+                'current_year': datetime.now().year
+            })
+            
+            plain_message = f"""Dear {employee_name},
+
+Your resignation has been fully approved by both manager and HR.
 
 Employee Details:
 - Name: {employee_name}
@@ -2889,34 +3030,28 @@ Employee Details:
 - Offboarding Date: {offboarding_date_plain}
 {f'- Resignation Reason: {releaved.reason_for_resignation}' if releaved.reason_for_resignation else ''}
 
-{description if description else 'Thank you for your contributions to the organization. We wish you all the best in your future endeavors.'}
+HR Comments: {description if description else 'Thank you for your contributions to the organization. We wish you all the best in your future endeavors.'}
 
 Best regards,
 HR Department
 Global Tech Software Solutions
 """
-        
-        try:
-            # Send email asynchronously
-            Thread(
-                target=send_email_async,
-                args=(subject, plain_message, html_message, email)
-            ).start()
-        except Exception as e:
-            print(f"Failed to send approval email to {email}: {str(e)}")
-        
-        # Send notification to all CEOs and Managers about successful offboarding
-        try:
-            from accounts.models import CEO, Manager
             
-            # Get all CEOs and Managers
-            ceos = CEO.objects.all()
-            managers = Manager.objects.all()
+            try:
+                Thread(target=send_email_async, args=(subject, plain_message, html_message, email)).start()
+            except Exception as e:
+                print(f"Failed to send HR approval email to {email}: {str(e)}")
             
-            # Prepare notification email for leadership
-            leadership_subject = f"Employee Offboarding Notification - {employee_name}"
-            
-            leadership_plain_message = f"""Dear Leadership,
+            # Send notification to all CEOs and Managers
+            try:
+                from accounts.models import CEO, Manager
+                
+                ceos = CEO.objects.all()
+                managers = Manager.objects.all()
+                
+                leadership_subject = f"Employee Offboarding Notification - {employee_name}"
+                
+                leadership_plain_message = f"""Dear Leadership,
 
 This is to inform you that an employee has been successfully offboarded from the organization.
 
@@ -2928,9 +3063,10 @@ Employee Offboarding Details:
 - Offboarding Date: {offboarding_date_plain}
 {f'- Resignation Reason: {releaved.reason_for_resignation}' if releaved.reason_for_resignation else ''}
 
-Status: Approved and Offboarded
+Approval Status: Approved by Manager and HR
 
-{description if description else 'The employee has completed the offboarding process.'}
+Manager Comments: {releaved.manager_description or 'N/A'}
+HR Comments: {description if description else 'N/A'}
 
 This is an automated notification from the HR system.
 
@@ -2938,106 +3074,93 @@ Best regards,
 HR Department
 Global Tech Software Solutions
 """
+                
+                leadership_html_message = render_to_string('emails/employee_offboarded_leadership.html', {
+                    'employee_name': employee_name,
+                    'designation': designation,
+                    'email': email,
+                    'department': releaved.department or 'N/A',
+                    'offboarding_date': offboarding_date,
+                    'reason_for_resignation': releaved.reason_for_resignation,
+                    'description': f"Manager: {releaved.manager_description or 'N/A'}\nHR: {description or 'N/A'}",
+                    'current_year': datetime.now().year
+                })
+                
+                # Send to CEOs
+                for ceo in ceos:
+                    try:
+                        Thread(target=send_email_async, args=(leadership_subject, leadership_plain_message, leadership_html_message, ceo.email.email)).start()
+                    except Exception as e:
+                        print(f"Failed to send offboarding notification to CEO {ceo.email.email}: {str(e)}")
+                
+                # Send to Managers
+                for manager in managers:
+                    try:
+                        Thread(target=send_email_async, args=(leadership_subject, leadership_plain_message, leadership_html_message, manager.email.email)).start()
+                    except Exception as e:
+                        print(f"Failed to send offboarding notification to Manager {manager.email.email}: {str(e)}")
+                
+                print(f"Offboarding notifications sent to {ceos.count()} CEOs and {managers.count()} Managers")
             
-            # Use template for HTML email
-            leadership_html_message = render_to_string('emails/employee_offboarded_leadership.html', {
+            except Exception as e:
+                print(f"Failed to send offboarding notifications to leadership: {str(e)}")
+            
+            # Delete Employee, EmployeeDetails, and User
+            try:
+                user = User.objects.filter(email=email).first()
+                if user:
+                    Employee.objects.filter(email=user).delete()
+                    EmployeeDetails.objects.filter(email=user).delete()
+                    user.delete()
+            except Exception as e:
+                return Response({"error": f"Failed to delete related records: {str(e)}"}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+            
+            return Response({
+                "message": f"HR approved resignation for {email}. Employee offboarded successfully. Notifications sent."
+            }, status=status.HTTP_200_OK)
+        
+        else:  # HR Rejected
+            # Update the record to show it was rejected but keep it for audit purposes
+            releaved.hr_approved = 'Rejected'
+            releaved.hr_description = description
+            releaved.save()
+            
+            # Send rejection email
+            subject = "Resignation Request - HR Rejected"
+            html_message = render_to_string('emails/resignation_hr_rejected.html', {
                 'employee_name': employee_name,
                 'designation': designation,
                 'email': email,
-                'department': releaved.department or 'N/A',
-                'offboarding_date': offboarding_date,
                 'reason_for_resignation': releaved.reason_for_resignation,
                 'description': description,
                 'current_year': datetime.now().year
             })
             
-            # Send to all CEOs
-            for ceo in ceos:
-                try:
-                    Thread(
-                        target=send_email_async,
-                        args=(leadership_subject, leadership_plain_message, leadership_html_message, ceo.email.email)
-                    ).start()
-                except Exception as e:
-                    print(f"Failed to send offboarding notification to CEO {ceo.email.email}: {str(e)}")
-            
-            # Send to all Managers
-            for manager in managers:
-                try:
-                    Thread(
-                        target=send_email_async,
-                        args=(leadership_subject, leadership_plain_message, leadership_html_message, manager.email.email)
-                    ).start()
-                except Exception as e:
-                    print(f"Failed to send offboarding notification to Manager {manager.email.email}: {str(e)}")
-            
-            print(f"Offboarding notifications sent to {ceos.count()} CEOs and {managers.count()} Managers")
-            
-        except Exception as e:
-            print(f"Failed to send offboarding notifications to leadership: {str(e)}")
-        
-        try:
-            # Find and delete User by email string
-            user = User.objects.filter(email=email).first()
-            if user:
-                # Delete related records (signals will handle backup)
-                Employee.objects.filter(email=user).delete()
-                EmployeeDetails.objects.filter(email=user).delete()
-                user.delete()  # Delete the User
-                
-                # ReleavedEmployee is unaffected since email is now a plain string field
-        except Exception as e:
-            return Response({"error": f"Failed to delete related records: {str(e)}"}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+            plain_message = f"""Dear {employee_name},
 
-        return Response({
-            "message": f"{email} approval set to {approved}. Employee, EmployeeDetails, and User deleted. ReleavedEmployee preserved. Approval email sent to employee and offboarding notifications sent to all CEOs and Managers."
-        }, status=status.HTTP_200_OK)
-    
-    else:  # approved == 'no'
-        # Send rejection email using template
-        subject = "Resignation Request - Update"
-        
-        html_message = render_to_string('emails/resignation_rejected.html', {
-            'employee_name': employee_name,
-            'designation': designation,
-            'email': email,
-            'reason_for_resignation': releaved.reason_for_resignation,
-            'description': description,
-            'current_year': datetime.now().year
-        })
-        
-        plain_message = f"""Dear {employee_name},
-
-Regarding your resignation request:
+Your resignation has been put on hold by HR.
 
 Employee Details:
 - Name: {employee_name}
 - Designation: {designation}
 - Email: {email}
-- Status: Rejected / On Hold
 {f'- Resignation Reason: {releaved.reason_for_resignation}' if releaved.reason_for_resignation else ''}
 
-{description if description else 'Please contact HR department for further discussion regarding your resignation request.'}
+HR Comments: {description if description else 'Please contact HR for further discussion.'}
 
 Best regards,
 HR Department
 Global Tech Software Solutions
 """
-        
-        try:
-            # Send email asynchronously
-            Thread(
-                target=send_email_async,
-                args=(subject, plain_message, html_message, email)
-            ).start()
-        except Exception as e:
-            print(f"Failed to send rejection email to {email}: {str(e)}")
-        
-        # Rejection - keep the record with approved='no' status
-        # Employee can reapply (transfer_to_releaved will handle deletion of rejected record)
-        return Response({
-            "message": f"{email} resignation rejected. Record marked as rejected. Rejection email sent."
-        }, status=status.HTTP_200_OK)
+            
+            try:
+                Thread(target=send_email_async, args=(subject, plain_message, html_message, email)).start()
+            except Exception as e:
+                print(f"Failed to send HR rejection email to {email}: {str(e)}")
+            
+            return Response({
+                "message": f"HR rejected resignation for {email}. Rejection email sent. Employee can now submit a new application."
+            }, status=status.HTTP_200_OK)
 
 
 @api_view(['GET'])
@@ -3045,19 +3168,22 @@ def list_releaved_employees(request):
     """
     Get all relieved employees with optional filtering
     Query params:
-    - approved: Filter by approval status ('yes', 'no', or 'pending')
+    - manager_approved: Filter by manager approval status ('Pending', 'Approved', 'Rejected')
+    - hr_approved: Filter by HR approval status ('Pending', 'Approved', 'Rejected')
     - department: Filter by department
     - designation: Filter by designation
     """
     releaved_employees = ReleavedEmployee.objects.all().order_by('-offboarded_at')
     
-    # Apply filters
-    approved_filter = request.GET.get('approved')
-    if approved_filter:
-        if approved_filter == 'pending':
-            releaved_employees = releaved_employees.filter(approved__isnull=True)
-        else:
-            releaved_employees = releaved_employees.filter(approved=approved_filter)
+    # Apply filters for manager approval
+    manager_approved_filter = request.GET.get('manager_approved')
+    if manager_approved_filter:
+        releaved_employees = releaved_employees.filter(manager_approved=manager_approved_filter)
+    
+    # Apply filters for HR approval
+    hr_approved_filter = request.GET.get('hr_approved')
+    if hr_approved_filter:
+        releaved_employees = releaved_employees.filter(hr_approved=hr_approved_filter)
     
     department_filter = request.GET.get('department')
     if department_filter:
@@ -3072,17 +3198,17 @@ def list_releaved_employees(request):
 
 
 @api_view(['GET'])
-def get_releaved_employee(request, email):
+def get_releaved_employee(request, pk):
     """
-    Get single relieved employee by email
+    Get single relieved employee by ID
     Returns full details including resignation reason and approval status
     """
     try:
-        releaved = ReleavedEmployee.objects.get(email=email)
+        releaved = ReleavedEmployee.objects.get(id=pk)
         serializer = ReleavedEmployeeSerializer(releaved)
         return Response(serializer.data, status=status.HTTP_200_OK)
     except ReleavedEmployee.DoesNotExist:
         return Response({
             "error": "Relieved employee not found.",
-            "email": email
+            "id": pk
         }, status=status.HTTP_404_NOT_FOUND)

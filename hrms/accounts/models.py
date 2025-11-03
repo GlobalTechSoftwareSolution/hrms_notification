@@ -3,11 +3,6 @@ from django.contrib.auth.models import AbstractBaseUser, PermissionsMixin, BaseU
 from django.utils import timezone
 from django.core.exceptions import ValidationError
 from datetime import datetime, time
-from typing import TYPE_CHECKING
-
-if TYPE_CHECKING:
-    from django.db.models.manager import Manager
-
 
 # ------------------- USER -------------------
 class UserManager(BaseUserManager):
@@ -465,8 +460,11 @@ class ReleavedEmployee(models.Model):
     pf_uan = models.CharField(max_length=50, null=True, blank=True)
     ifsc = models.CharField(max_length=20, null=True, blank=True)
     reason_for_resignation = models.TextField(null=True, blank=True)
-    approved = models.CharField(max_length=10, null=True, blank=True)
-    description = models.TextField(null=True, blank=True)
+    # Two-stage approval process: Manager approval first, then HR approval
+    manager_approved = models.CharField(max_length=10, null=True, blank=True)  # Values: 'Pending', 'Approved', 'Rejected'
+    manager_description = models.TextField(null=True, blank=True)
+    hr_approved = models.CharField(max_length=10, null=True, blank=True)  # Values: 'Pending', 'Approved', 'Rejected'
+    hr_description = models.TextField(null=True, blank=True)
     offboarded_at = models.DateTimeField(default=timezone.now, null=True, blank=True)
 
     class Meta:

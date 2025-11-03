@@ -19,7 +19,7 @@
             box-shadow: 0 2px 8px rgba(0,0,0,0.1);
         }
         .email-header {
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);
             color: #ffffff;
             padding: 30px;
             text-align: center;
@@ -39,7 +39,7 @@
         }
         .info-box {
             background-color: #f8f9fa;
-            border-left: 4px solid #667eea;
+            border-left: 4px solid #f5576c;
             padding: 20px;
             margin: 25px 0;
             border-radius: 4px;
@@ -54,22 +54,15 @@
         }
         .info-label {
             font-weight: 600;
-            color: #667eea;
+            color: #f5576c;
             min-width: 180px;
         }
         .info-value {
             color: #495057;
         }
-        .message-box {
-            background-color: #e7f3ff;
-            border: 1px solid #b3d9ff;
-            padding: 20px;
-            margin: 25px 0;
-            border-radius: 4px;
-        }
         .approval-stages {
-            background-color: #e8f5e9;
-            border: 1px solid #a5d6a7;
+            background-color: #ffebee;
+            border: 1px solid #f5576c;
             padding: 20px;
             margin: 25px 0;
             border-radius: 4px;
@@ -86,9 +79,23 @@
             margin-right: 10px;
             font-size: 18px;
         }
-        .stage-approved {
-            color: #4caf50;
+        .stage-rejected {
+            color: #f5576c;
             font-weight: 600;
+        }
+        .message-box {
+            background-color: #fff3cd;
+            border: 1px solid #ffc107;
+            padding: 20px;
+            margin: 25px 0;
+            border-radius: 4px;
+        }
+        .next-steps {
+            background-color: #e3f2fd;
+            border: 1px solid #90caf9;
+            padding: 20px;
+            margin: 25px 0;
+            border-radius: 4px;
         }
         .email-footer {
             background-color: #f8f9fa;
@@ -99,20 +106,20 @@
         }
         .company-name {
             font-weight: 600;
-            color: #667eea;
+            color: #f5576c;
         }
     </style>
 </head>
 <body>
     <div class="email-container">
         <div class="email-header">
-            <h1>✓ Resignation Fully Approved</h1>
+            <h1>⚠ Resignation Rejected by Manager</h1>
         </div>
         
         <div class="email-body">
             <p class="greeting">Dear <strong>{{ employee_name }}</strong>,</p>
             
-            <p>Your resignation has been <strong>fully approved</strong> by both your manager and HR. We confirm the completion of your offboarding process.</p>
+            <p>Your resignation has been <strong>rejected by your manager</strong>. Please review the comments below.</p>
             
             <div class="info-box">
                 <div class="info-row">
@@ -127,10 +134,6 @@
                     <span class="info-label">Email:</span>
                     <span class="info-value">{{ email }}</span>
                 </div>
-                <div class="info-row">
-                    <span class="info-label">Offboarding Date:</span>
-                    <span class="info-value">{{ offboarding_date }}</span>
-                </div>
                 {% if reason_for_resignation %}
                 <div class="info-row">
                     <span class="info-label">Resignation Reason:</span>
@@ -140,32 +143,32 @@
             </div>
             
             <div class="approval-stages">
-                <h3>Approval Stages Completed</h3>
+                <h3>Approval Stages</h3>
                 <div class="stage">
-                    <span class="stage-icon">✓</span>
-                    <span class="stage-approved">Manager Approval: Approved</span>
+                    <span class="stage-icon">✗</span>
+                    <span class="stage-rejected">Manager Approval: Rejected</span>
                 </div>
                 <div class="stage">
-                    <span class="stage-icon">✓</span>
-                    <span class="stage-approved">HR Approval: Approved</span>
+                    <span class="stage-icon">—</span>
+                    <span>HR Approval: Not Applicable</span>
                 </div>
             </div>
             
             {% if description %}
             <div class="message-box">
-                <strong>HR Message:</strong><br>
+                <strong>Manager Comments:</strong><br>
                 {{ description }}
             </div>
-            {% else %}
-            <p>Thank you for your contributions to the organization. We wish you all the best in your future endeavors.</p>
             {% endif %}
             
-            <p><strong>Next Steps:</strong></p>
-            <ul>
-                <li>All access credentials have been revoked</li>
-                <li>Final settlement will be processed as per company policy</li>
-                <li>Exit interview feedback has been recorded</li>
-            </ul>
+            <div class="next-steps">
+                <h3>Next Steps</h3>
+                <ul>
+                    <li>You may submit a new resignation request after addressing the concerns</li>
+                    <li>Contact your manager to discuss the feedback in detail</li>
+                    <li>Reach out to HR if you need clarification on company policies</li>
+                </ul>
+            </div>
         </div>
         
         <div class="email-footer">
