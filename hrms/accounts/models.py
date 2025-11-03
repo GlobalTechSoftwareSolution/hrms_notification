@@ -465,6 +465,7 @@ class ReleavedEmployee(models.Model):
     manager_description = models.TextField(null=True, blank=True)
     hr_approved = models.CharField(max_length=10, null=True, blank=True)  # Values: 'Pending', 'Approved', 'Rejected'
     hr_description = models.TextField(null=True, blank=True)
+    ready_to_releve = models.BooleanField(default=False)  # Set to True only after HR approval is completed
     offboarded_at = models.DateTimeField(default=timezone.now, null=True, blank=True)
 
     class Meta:
@@ -521,6 +522,41 @@ class AbsentEmployeeDetails(models.Model):
 
     def __str__(self):
         return f"{self.fullname or self.email} - {self.date}"
+
+
+class ReleavedAttendance(models.Model):
+    """
+    Stores attendance records of releaved employees before deletion.
+    This preserves attendance history for audit purposes after employee offboarding.
+    """
+    LOCATION_TYPE_CHOICES = [
+        ('office', 'Office'),
+        ('work', 'Work From Home'),
+    ]
+
+    # Store email as plain text (not FK) to preserve data after employee deletion
+    email = models.EmailField(max_length=254)
+    fullname = models.CharField(max_length=255, null=True, blank=True)
+    department = models.CharField(max_length=100, null=True, blank=True)
+    date = models.DateField()
+    check_in = models.TimeField(null=True, blank=True)
+    check_out = models.TimeField(null=True, blank=True)
+    latitude = models.FloatField(null=True, blank=True)
+    longitude = models.FloatField(null=True, blank=True)
+    location_type = models.CharField(max_length=10, choices=LOCATION_TYPE_CHOICES, default='office')
+    
+    # Audit fields
+    archived_at = models.DateTimeField(default=timezone.now)
+    releaved_employee_id = models.IntegerField(null=True, blank=True, help_text="Reference to ReleavedEmployee record")
+
+    class Meta:
+        db_table = 'accounts_releavedattendance'
+        verbose_name = "Releaved Attendance"
+        verbose_name_plural = "Releaved Attendances"
+        ordering = ['-date', '-archived_at']
+
+    def __str__(self):
+        return f"Releaved Attendance: {self.fullname or self.email} - {self.date}"
 
 
 class AppliedJobs(models.Model):

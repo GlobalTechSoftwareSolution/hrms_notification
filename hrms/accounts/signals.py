@@ -157,3 +157,35 @@ def backup_and_cleanup_on_user_delete(sender, instance, **kwargs):
             obj.delete()
         except table.DoesNotExist:
             continue
+
+    # 3) Move attendance records to ReleavedAttendance before deletion
+    try:
+        from accounts.models import Attendance, ReleavedAttendance
+        
+        # Get the releaved employee record for reference
+        releaved_employee = ReleavedEmployee.objects.filter(email=email_str).first()
+        releaved_employee_id = releaved_employee.id if releaved_employee else None
+        
+        # Get all attendance records for this employee
+        attendance_records = Attendance.objects.filter(email=instance)
+        
+        # Move each attendance record to ReleavedAttendance
+        for attendance in attendance_records:
+            ReleavedAttendance.objects.create(
+                email=email_str,  # Store as string, not FK
+                fullname=attendance.fullname,
+                department=attendance.department,
+                date=attendance.date,
+                check_in=attendance.check_in,
+                check_out=attendance.check_out,
+                latitude=attendance.latitude,
+                longitude=attendance.longitude,
+                location_type=attendance.location_type,
+                releaved_employee_id=releaved_employee_id
+            )
+        
+        # Delete all attendance records for this employee
+        attendance_records.delete()
+        
+    except Exception as e:
+        print(f"Failed to move attendance records for {email_str}: {str(e)}")

@@ -2999,6 +2999,11 @@ Global Tech Software Solutions
         releaved.hr_approved = approved
         releaved.hr_description = description
         releaved.offboarded_at = timezone.now()
+        
+        # Set ready_to_releve flag to True only when HR approves
+        if approved == 'Approved':
+            releaved.ready_to_releve = True
+        
         releaved.save()
         
         if approved == 'Approved':
