@@ -226,6 +226,12 @@ class Attendance(models.Model):
 
     CHECK_IN_DEADLINE = time(10, 45)  # 10:45 AM
 
+    class Meta:
+        unique_together = ('email', 'date')
+        indexes = [
+            models.Index(fields=['email', 'date'])
+        ]
+
     def save(self, *args, **kwargs):
         # Fill fullname and department from Employee
         if self.email:
@@ -507,6 +513,12 @@ class AbsentEmployeeDetails(models.Model):
     fullname = models.CharField(max_length=255, null=True, blank=True)
     department = models.CharField(max_length=100, null=True, blank=True)
     date = models.DateField(default=timezone.localdate)
+
+    class Meta:
+        unique_together = ('email', 'date')
+        indexes = [
+            models.Index(fields=['email', 'date'])
+        ]
 
     def save(self, *args, **kwargs):
         # Automatically populate fullname and department from Employee

@@ -1,6 +1,6 @@
 """
 Django APScheduler - Automatic Absent Marking Scheduler
-Runs daily at 1:00 PM IST to mark employees as absent
+Runs daily at 10:45 AM IST to mark employees as absent
 """
 
 from apscheduler.schedulers.background import BackgroundScheduler
@@ -12,9 +12,9 @@ import pytz
 import logging
 
 from accounts.models import Employee, Attendance, AbsentEmployeeDetails, Holiday
+from .constants import IST, CHECK_IN_DEADLINE
 
 logger = logging.getLogger(__name__)
-IST = pytz.timezone("Asia/Kolkata")
 
 
 def mark_absent_employees():
@@ -42,17 +42,15 @@ def mark_absent_employees():
             return
         
         # Check if today is a holiday
-        is_holiday = Holiday.objects.filter(date=today).exists()
-        if is_holiday:
-            holiday = Holiday.objects.get(date=today)
+        holiday = Holiday.objects.filter(date=today).first()
+        if holiday:
             logger.info(f"🎉 Today is a holiday: {holiday.name} - No absent marking needed!")
             logger.info("="*60)
             return
         
-        # Check if current time is past 10:45 AM (10:45)
-        deadline = time(10, 45)
-        
-        if current_time < deadline:
+        # Check if current time is past 10:45 AM (CHECK_IN_DEADLINE)
+        if now_ist.time() < CHECK_IN_DEADLINE:
+            logger.warning(f"Too early ({now_ist.time()}). Skipping absent marking.")
             logger.warning(f"Too early ({current_time}). Skipping absent marking.")
             logger.info("="*60)
             return
@@ -82,13 +80,14 @@ def mark_absent_employees():
                 ).exists()
                 
                 if not already_absent:
-                    # Mark as absent
-                    AbsentEmployeeDetails.objects.create(
+                    # Mark as absent (idempotent)
+                    _, created = AbsentEmployeeDetails.objects.get_or_create(
                         email=emp.email,
                         date=today
                     )
-                    marked_absent_count += 1
-                    logger.info(f"  ❌ NEW ABSENT: {emp.fullname} ({emp.email.email})")
+                    if created:
+                        marked_absent_count += 1
+                        logger.info(f"  ❌ NEW ABSENT: {emp.fullname} ({emp.email.email})")
                 else:
                     skipped_already_absent += 1
                     logger.info(f"  ⏩ SKIP (already absent): {emp.fullname} ({emp.email.email})")

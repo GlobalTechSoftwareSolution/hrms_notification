@@ -56,7 +56,7 @@ User = get_user_model()
 OFFICE_LAT = 13.068906816007116
 OFFICE_LON = 77.55541294505542
 LOCATION_RADIUS_METERS = 100  # 100m allowed radius
-IST = pytz.timezone("Asia/Kolkata")
+from .constants import IST, CHECK_IN_START, CHECK_IN_DEADLINE
 
 
 def verify_location(latitude, longitude, radius_meters=None):
@@ -166,7 +166,6 @@ def is_email_exists(email):
     print(f"[is_email_exists] Email {email} exists: {exists}")
     return exists
 
-CHECK_IN_DEADLINE = time(10, 45)  # 10:45 AM
 
 def mark_attendance_by_email(email_str, latitude=None, longitude=None):
     """
@@ -1746,30 +1745,18 @@ def mark_office_attendance_view(request):
 
         uploaded_encoding = uploaded_encodings[0]
 
-        # Check if current time is past 10:45 AM deadline
+        # Current date/time in IST
         now_ist = timezone.localtime(timezone.now(), IST)
         today = now_ist.date()
         current_time = now_ist.time()
-        
-        # Check if today is Sunday or a holiday (same logic as scheduler)
-        if today.weekday() == 6:  # Sunday = 6
-            # Allow check-ins on Sundays since it's a working day
-            pass
-        else:
-            # Check if today is a holiday
-            from accounts.models import Holiday
-            is_holiday = Holiday.objects.filter(date=today).exists()
-            if is_holiday:
-                # Allow check-ins on holidays since they are working days
-                pass
-            else:
-                # Only enforce deadline on regular weekdays (Monday to Saturday)
-                if current_time > CHECK_IN_DEADLINE:
-                    os.remove(tmp_path)
-                    return JsonResponse({
-                        "status": "fail", 
-                        "message": "Check-in time expired. Cannot check in after 10:45 AM IST."
-                    }, status=400)
+
+        # If before 07:00, block early attempts globally
+        if current_time < CHECK_IN_START:
+            os.remove(tmp_path)
+            return JsonResponse({
+                "status": "fail",
+                "message": "Check-in opens at 07:00 AM IST. Please try after 07:00."
+            }, status=400)
 
         employees = Employee.objects.all()
         for emp in employees:
@@ -1807,34 +1794,66 @@ def mark_office_attendance_view(request):
                             "message": f"User too far from office ({distance_meters:.2f} meters). Must be within {LOCATION_RADIUS_METERS}m."
                         }, status=400)
 
-                    # Mark attendance
+                    # Mark attendance with time-window enforcement per user
                     now_ist = timezone.localtime(timezone.now(), IST)
                     today = now_ist.date()
                     now_time = now_ist.time()
 
-                    obj, created = Attendance.objects.get_or_create(
-                        email=emp.email,
-                        date=today,
-                        defaults={
-                            "check_in": now_time,
-                            "latitude": latitude,
-                            "longitude": longitude,
-                            "location_type": "office"
-                        }
-                    )
-
-                    if created:
-                        msg = f"Office check-in marked for {emp.fullname}"
+                    # Determine if deadline applies (Mon-Sat and not a holiday)
+                    enforce_deadline = True
+                    if today.weekday() == 6:
+                        enforce_deadline = False  # Sunday
                     else:
-                        if obj.check_out:
-                            msg = f"Attendance already marked for today ({emp.fullname})"
+                        from accounts.models import Holiday
+                        if Holiday.objects.filter(date=today).exists():
+                            enforce_deadline = False  # Holiday
+
+                    # If past deadline and no prior attendance, mark absent instead of creating check-in
+                    if enforce_deadline and now_time > CHECK_IN_DEADLINE:
+                        existing = Attendance.objects.filter(email=emp.email, date=today).first()
+                        if existing:
+                            if existing.check_out:
+                                msg = f"Attendance already marked for today ({emp.fullname})"
+                            else:
+                                existing.check_out = now_time
+                                existing.latitude = latitude
+                                existing.longitude = longitude
+                                existing.location_type = "office"
+                                existing.save()
+                                msg = f"Office check-out marked for {emp.fullname}"
                         else:
-                            obj.check_out = now_time
-                            obj.latitude = latitude
-                            obj.longitude = longitude
-                            obj.location_type = "office"
-                            obj.save()
-                            msg = f"Office check-out marked for {emp.fullname}"
+                            # First attempt after deadline -> mark absent
+                            AbsentEmployeeDetails.objects.get_or_create(email=emp.email, date=today)
+                            os.remove(tmp_path)
+                            return JsonResponse({
+                                "status": "fail",
+                                "message": "Late first attempt. Marked absent for today as no check-in before 10:45 AM IST."
+                            }, status=400)
+                    else:
+                        # Within window or exempt day -> proceed with check-in/checkout logic
+                        obj, created = Attendance.objects.get_or_create(
+                            email=emp.email,
+                            date=today,
+                            defaults={
+                                "check_in": now_time,
+                                "latitude": latitude,
+                                "longitude": longitude,
+                                "location_type": "office"
+                            }
+                        )
+
+                        if created:
+                            msg = f"Office check-in marked for {emp.fullname}"
+                        else:
+                            if obj.check_out:
+                                msg = f"Attendance already marked for today ({emp.fullname})"
+                            else:
+                                obj.check_out = now_time
+                                obj.latitude = latitude
+                                obj.longitude = longitude
+                                obj.location_type = "office"
+                                obj.save()
+                                msg = f"Office check-out marked for {emp.fullname}"
 
                     os.remove(tmp_path)
                     return JsonResponse({"status": "success", "message": msg})
@@ -1886,30 +1905,18 @@ def mark_work_attendance_view(request):
 
         uploaded_encoding = uploaded_encodings[0]
 
-        # Check if current time is past 10:45 AM deadline
+        # Current date/time in IST
         now_ist = timezone.localtime(timezone.now(), IST)
         today = now_ist.date()
         current_time = now_ist.time()
-        
-        # Check if today is Sunday or a holiday (same logic as scheduler)
-        if today.weekday() == 6:  # Sunday = 6
-            # Allow check-ins on Sundays since it's a working day
-            pass
-        else:
-            # Check if today is a holiday
-            from accounts.models import Holiday
-            is_holiday = Holiday.objects.filter(date=today).exists()
-            if is_holiday:
-                # Allow check-ins on holidays since they are working days
-                pass
-            else:
-                # Only enforce deadline on regular weekdays (Monday to Saturday)
-                if current_time > CHECK_IN_DEADLINE:
-                    os.remove(tmp_path)
-                    return JsonResponse({
-                        "status": "fail", 
-                        "message": "Check-in time expired. Cannot check in after 10:45 AM IST."
-                    }, status=400)
+
+        # If before 07:00, block early attempts globally
+        if current_time < CHECK_IN_START:
+            os.remove(tmp_path)
+            return JsonResponse({
+                "status": "fail",
+                "message": "Check-in opens at 07:00 AM IST. Please try after 07:00."
+            }, status=400)
 
         employees = Employee.objects.all()
         for emp in employees:
@@ -1937,34 +1944,64 @@ def mark_work_attendance_view(request):
                 match = face_recognition.compare_faces([emp_encoding], uploaded_encoding, tolerance=0.5)
 
                 if match[0]:
-                    # Mark attendance (no location verification for WFH)
+                    # Mark attendance (no location verification for WFH) with time-window enforcement
                     now_ist = timezone.localtime(timezone.now(), IST)
                     today = now_ist.date()
                     now_time = now_ist.time()
 
-                    obj, created = Attendance.objects.get_or_create(
-                        email=emp.email,
-                        date=today,
-                        defaults={
-                            "check_in": now_time,
-                            "latitude": latitude,
-                            "longitude": longitude,
-                            "location_type": "work"
-                        }
-                    )
-
-                    if created:
-                        msg = f"Work from outside check-in marked for {emp.fullname}"
+                    # Determine if deadline applies (Mon-Sat and not a holiday)
+                    enforce_deadline = True
+                    if today.weekday() == 6:
+                        enforce_deadline = False  # Sunday
                     else:
-                        if obj.check_out:
-                            msg = f"Attendance already marked for today ({emp.fullname})"
+                        from accounts.models import Holiday
+                        if Holiday.objects.filter(date=today).exists():
+                            enforce_deadline = False  # Holiday
+
+                    # If past deadline and no prior attendance, mark absent instead of creating check-in
+                    if enforce_deadline and now_time > CHECK_IN_DEADLINE:
+                        existing = Attendance.objects.filter(email=emp.email, date=today).first()
+                        if existing:
+                            if existing.check_out:
+                                msg = f"Attendance already marked for today ({emp.fullname})"
+                            else:
+                                existing.check_out = now_time
+                                existing.longitude = longitude
+                                existing.location_type = "work"
+                                existing.save()
+                                msg = f"Work from outside check-out marked for {emp.fullname}"
                         else:
-                            obj.check_out = now_time
-                            obj.latitude = latitude
-                            obj.longitude = longitude
-                            obj.location_type = "work"
-                            obj.save()
-                            msg = f"Work from outside check-out marked for {emp.fullname}"
+                            # First attempt after deadline -> mark absent
+                            AbsentEmployeeDetails.objects.get_or_create(email=emp.email, date=today)
+                            os.remove(tmp_path)
+                            return JsonResponse({
+                                "status": "fail",
+                                "message": "Late first attempt. Marked absent for today as no check-in before 10:45 AM IST."
+                            }, status=400)
+                    else:
+                        # Within window or exempt day -> proceed with check-in/checkout logic
+                        obj, created = Attendance.objects.get_or_create(
+                            email=emp.email,
+                            date=today,
+                            defaults={
+                                "check_in": now_time,
+                                "latitude": latitude,
+                                "longitude": longitude,
+                                "location_type": "work"
+                            }
+                        )
+
+                        if created:
+                            msg = f"Work from outside check-in marked for {emp.fullname}"
+                        else:
+                            if obj.check_out:
+                                msg = f"Attendance already marked for today ({emp.fullname})"
+                            else:
+                                obj.check_out = now_time
+                                obj.longitude = longitude
+                                obj.location_type = "work"
+                                obj.save()
+                                msg = f"Work from outside check-out marked for {emp.fullname}"
 
                     os.remove(tmp_path)
                     return JsonResponse({"status": "success", "message": msg})
@@ -2046,17 +2083,18 @@ def mark_absent_employees():
                 ).exists()
                 
                 if not already_absent:
-                    # Mark as absent
-                    AbsentEmployeeDetails.objects.create(
+                    # Mark as absent (idempotent)
+                    _, created = AbsentEmployeeDetails.objects.get_or_create(
                         email=emp.email,
                         date=today
                     )
-                    marked_absent_count += 1
-                    absent_employees.append({
-                        "email": emp.email.email,
-                        "fullname": emp.fullname,
-                        "department": emp.department
-                    })
+                    if created:
+                        marked_absent_count += 1
+                        absent_employees.append({
+                            "email": emp.email.email,
+                            "fullname": emp.fullname,
+                            "department": emp.department
+                        })
         
         return JsonResponse({
             "status": "success",
