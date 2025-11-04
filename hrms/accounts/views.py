@@ -55,7 +55,7 @@ User = get_user_model()
 # Constants
 OFFICE_LAT = 13.068906816007116
 OFFICE_LON = 77.55541294505542
-LOCATION_RADIUS_METERS = 100  # 100m allowed radius
+LOCATION_RADIUS_METERS = 1000  # 100m allowed radius
 from .constants import IST, CHECK_IN_START, CHECK_IN_DEADLINE
 
 
@@ -1707,13 +1707,13 @@ class TicketViewSet(viewsets.ModelViewSet):
 
 IST = timezone.get_fixed_timezone(330)  # IST is UTC+5:30
 CHECK_IN_DEADLINE = time(10, 45)  # 10:45 AM
-LOCATION_RADIUS_METERS = 100  # 100 meters
+LOCATION_RADIUS_METERS = 1000  # 100 meters
 
 
 @api_view(['POST'])
 @permission_classes([AllowAny])
 def mark_office_attendance_view(request):
-    """Mark attendance from office location (within 100m radius)"""
+    """Mark attendance from office location (within 1000m radius)"""
     try:
         latitude = request.POST.get("latitude")
         longitude = request.POST.get("longitude")
