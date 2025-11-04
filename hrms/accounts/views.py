@@ -39,6 +39,7 @@ from .models import (
     User, CEO, HR, Manager, Department, Employee, Attendance, Admin,
     Leave, Payroll, TaskTable, Project, Notice, Report,
     Document, Award, Ticket, EmployeeDetails, ReleavedEmployee, Holiday, AbsentEmployeeDetails, AppliedJobs, 
+    RaiseRequestAttendance,
     JobPosting
 )
 
@@ -2686,6 +2687,129 @@ def get_absent_employee(request, email):
     absent_records = AbsentEmployeeDetails.objects.filter(email=user)
     serializer = AbsentEmployeeDetailsSerializer(absent_records, many=True)
     return Response(serializer.data)
+
+
+# ===== Attendance Correction Requests =====
+@api_view(['POST'])
+@permission_classes([AllowAny])
+def raise_attendance_request(request):
+    """
+    Employee raises a request to change Absent to Present for a given date.
+    Body: { "email": "user@x.com", "date": "YYYY-MM-DD", "reason": "..." }
+    One request per (email, date).
+    """
+    email = request.data.get('email')
+    date_str = request.data.get('date')
+    reason = request.data.get('reason')
+
+    if not email or not date_str or not reason:
+        return Response({"error": "email, date, and reason are required"}, status=status.HTTP_400_BAD_REQUEST)
+
+    user = get_object_or_404(User, email=email)
+    try:
+        req_date = datetime.strptime(date_str, "%Y-%m-%d").date()
+    except ValueError:
+        return Response({"error": "Invalid date format. Use YYYY-MM-DD"}, status=status.HTTP_400_BAD_REQUEST)
+
+    obj, created = RaiseRequestAttendance.objects.get_or_create(
+        email=user,
+        date=req_date,
+        defaults={
+            'reason': reason,
+        }
+    )
+
+    if not created:
+        # Update reason if re-submitted while pending/rejected
+        obj.reason = reason or obj.reason
+        obj.status = obj.status or 'Pending'
+        obj.save()
+
+    return Response({
+        "message": "Attendance request submitted",
+        "id": obj.id,
+        "email": email,
+        "date": str(obj.date),
+        "status": obj.status
+    }, status=status.HTTP_201_CREATED)
+
+
+@api_view(['GET'])
+@permission_classes([AllowAny])
+def list_attendance_requests(request):
+    """
+    List correction requests. Optional filters: status, email
+    """
+    qs = RaiseRequestAttendance.objects.all().order_by('-created_at')
+    status_filter = request.GET.get('status')
+    email_filter = request.GET.get('email')
+    if status_filter:
+        qs = qs.filter(status=status_filter)
+    if email_filter:
+        qs = qs.filter(email__email=email_filter)
+
+    data = [
+        {
+            'id': r.id,
+            'email': r.email.email,
+            'date': str(r.date),
+            'reason': r.reason,
+            'manager_remark': r.manager_remark,
+            'status': r.status,
+            'reviewed_by': r.reviewed_by.email if r.reviewed_by else None,
+            'created_at': r.created_at.isoformat(),
+            'updated_at': r.updated_at.isoformat(),
+        }
+        for r in qs
+    ]
+    return Response(data)
+
+
+@api_view(['PATCH'])
+@permission_classes([AllowAny])
+def review_attendance_request(request, pk):
+    """
+    Manager reviews a request.
+    Body: { "approved": true/false, "manager_remark": "...", "reviewer_email": "manager@x.com" }
+    On approve: remove AbsentEmployeeDetails(email,date) and ensure Attendance exists (create if needed).
+    """
+    approved = request.data.get('approved')
+    manager_remark = request.data.get('manager_remark', '')
+    reviewer_email = request.data.get('reviewer_email')
+
+    if approved is None or reviewer_email is None:
+        return Response({"error": "approved and reviewer_email are required"}, status=status.HTTP_400_BAD_REQUEST)
+
+    req = get_object_or_404(RaiseRequestAttendance, id=pk)
+    reviewer = get_object_or_404(User, email=reviewer_email)
+
+    req.reviewed_by = reviewer
+    req.manager_remark = manager_remark
+    req.status = 'Approved' if approved else 'Rejected'
+    req.save()
+
+    if approved:
+        # Remove absent record if present
+        AbsentEmployeeDetails.objects.filter(email=req.email, date=req.date).delete()
+
+        # Ensure an attendance record exists; if not, create with check_in at deadline
+        from .constants import CHECK_IN_DEADLINE
+        Attendance.objects.get_or_create(
+            email=req.email,
+            date=req.date,
+            defaults={
+                'check_in': CHECK_IN_DEADLINE,
+                'location_type': 'office',
+                'latitude': OFFICE_LAT,
+                'longitude': OFFICE_LON
+            }
+        )
+
+    return Response({
+        "message": "Request reviewed",
+        "id": req.id,
+        "status": req.status
+    })
 
 
 class CareerViewSet(viewsets.ModelViewSet):

@@ -210,7 +210,6 @@ class Award(models.Model):
 class Attendance(models.Model):
     LOCATION_TYPE_CHOICES = [
         ('office', 'Office'),
-        ('work', 'Work From Home'),
     ]
 
     id = models.AutoField(primary_key=True)
@@ -530,10 +529,45 @@ class AbsentEmployeeDetails(models.Model):
             except Exception:
                 # Just in case Employee object doesn't exist
                 pass
+
+
+class RaiseRequestAttendance(models.Model):
+    """
+    A request raised by an employee to convert an Absent day to Present.
+    One request per (email, date). Reviewed by reporting manager.
+    """
+    STATUS_CHOICES = (
+        ('Pending', 'Pending'),
+        ('Approved', 'Approved'),
+        ('Rejected', 'Rejected'),
+    )
+
+    id = models.AutoField(primary_key=True)
+    email = models.ForeignKey('User', on_delete=models.CASCADE, to_field='email')
+    date = models.DateField()
+    reason = models.TextField()
+    manager_remark = models.TextField(null=True, blank=True)
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='Pending')
+    reviewed_by = models.ForeignKey('User', on_delete=models.SET_NULL, null=True, blank=True, related_name='attendance_requests_reviewed')
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        unique_together = ('email', 'date')
+        indexes = [
+            models.Index(fields=['email', 'date']),
+            models.Index(fields=['status']),
+        ]
+
+    def save(self, *args, **kwargs):
         super().save(*args, **kwargs)
 
     def __str__(self):
-        return f"{self.fullname or self.email} - {self.date}"
+        try:
+            email_str = self.email.email
+        except Exception:
+            email_str = str(self.email)
+        return f"{email_str} - {self.date}"
 
 
 class ReleavedAttendance(models.Model):

@@ -1,4 +1,5 @@
 from django.urls import path
+from .views import raise_attendance_request, list_attendance_requests, review_attendance_request
 from accounts.views import (
     LoginView, CreateSuperUserView, SignupView, approve_user, reject_user,
     today_attendance, RegisterView, list_attendance, DepartmentViewSet,
@@ -127,4 +128,8 @@ urlpatterns = [
     path('get_releaved/<int:pk>/', get_releaved_employee, name='get-releaved-employee'),
     path('releaved/', transfer_to_releaved, name='transfer-to-releaved'),
     path('releaved/<int:pk>/', approve_releaved, name='approve-releaved'),
+
+    path('raise_attendance/', raise_attendance_request, name='raise-attendance-request'),
+    path('attendance_requests/', list_attendance_requests, name='list-attendance-requests'),
+    path('attendance_requests/<int:pk>/', review_attendance_request, name='review-attendance-request'),
 ]
