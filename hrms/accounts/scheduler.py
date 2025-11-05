@@ -8,7 +8,6 @@ from apscheduler.triggers.cron import CronTrigger
 from django.conf import settings
 from django.utils import timezone
 from datetime import time
-import pytz
 import logging
 
 from accounts.models import Employee, Attendance, AbsentEmployeeDetails, Holiday
