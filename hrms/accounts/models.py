@@ -246,7 +246,13 @@ class Attendance(models.Model):
     def __str__(self):
         return f"{self.fullname or self.email} - {self.date}"
 
+
 class Leave(models.Model):
+    PAID_STATUS_CHOICES = [
+        ('Paid', 'Paid'),
+        ('Unpaid', 'Unpaid'),
+    ]
+    
     id = models.AutoField(primary_key=True)
     email = models.ForeignKey(User, on_delete=models.CASCADE, to_field='email')
     start_date = models.DateField()
@@ -254,6 +260,7 @@ class Leave(models.Model):
     leave_type = models.CharField(max_length=50, null=True, blank=True)
     reason = models.TextField(null=True, blank=True)
     status = models.CharField(max_length=20, default='Pending')
+    paid_status = models.CharField(max_length=10, choices=PAID_STATUS_CHOICES, null=True, blank=True)
     applied_on = models.DateField(auto_now_add=True)
 
     class Meta:
@@ -634,7 +641,7 @@ class AppliedJobs(models.Model):
         db_table = 'accounts_appliedjobs'
 
     def __str__(self):
-        return f"{self.full_name} ({self.email})"
+        return f"{self.fullname} ({self.email})"
 
 
 class JobPosting(models.Model):
