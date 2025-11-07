@@ -16,7 +16,8 @@ from accounts.views import (
     attendance_page, mark_office_attendance_view, mark_work_attendance_view, mark_absent_employees, RequestPasswordResetView, PasswordResetConfirmView,
     appointment_letter, offer_letter, releaving_letter, bonafide_certificate, TicketViewSet, 
     HolidayViewSet, list_absent_employees, CareerViewSet, AppliedJobViewSet, 
-    transfer_to_releaved, approve_releaved, list_releaved_employees, get_releaved_employee, ReleavedEmployeeViewSet, PettyCashViewSet
+    transfer_to_releaved, approve_releaved, list_releaved_employees, get_releaved_employee, create_pettycash, 
+    list_pettycash, get_pettycash, update_pettycash, delete_pettycash,
 )
 
 urlpatterns = [
@@ -117,7 +118,6 @@ urlpatterns = [
     path('list_absent/', list_absent_employees, name='list-absent-employees'),
     path('get_absent/<str:email>/', get_absent_employee, name='get_absent_employee'),
 
-
     path('applied_jobs/', AppliedJobViewSet.as_view({'get': 'list', 'post': 'create'}), name='career-list'),
     path('applied_jobs/<str:email>/', AppliedJobViewSet.as_view({'get': 'retrieve', 'patch': 'partial_update', 'delete': 'destroy'}), name='career-detail'),
     path('applied_jobs/<str:email>/set_hired/', AppliedJobViewSet.as_view({'patch': 'set_hired'}), name='set-hired'),
@@ -133,6 +133,10 @@ urlpatterns = [
     path('attendance_requests/', list_attendance_requests, name='list-attendance-requests'),
     path('attendance_requests/<int:pk>/', review_attendance_request, name='review-attendance-request'),
 
-    path('pettycash/', PettyCashViewSet.as_view({'get': 'list', 'post': 'create'})),
-    path('pettycash/<int:pk>/', PettyCashViewSet.as_view({'get': 'retrieve', 'patch': 'partial_update', 'delete': 'destroy'})),
+    path('list_pettycashs/', list_pettycash, name='list_pettycash'),
+    path('create_pettycash/', create_pettycash, name='create_pettycash'),
+    path('get_pettycash/<int:id>/', get_pettycash, name='get_pettycash'),
+    path('update_pettycash/<int:id>/', update_pettycash, name='update_pettycash'),
+    path('delete_pettycash/<int:id>/', delete_pettycash, name='delete_pettycash'),
+    
 ]

@@ -3525,10 +3525,66 @@ def get_releaved_employee(request, pk):
             "id": pk
         }, status=status.HTTP_404_NOT_FOUND)
 
-class PettyCashViewSet(viewsets.ModelViewSet):
-    queryset = PettyCash.objects.all()
-    serializer_class = PettyCashSerializer
-    permission_classes = [AllowAny]
 
-    def perform_create(self, serializer):
-        serializer.save(email=self.request.user)
+from rest_framework.decorators import api_view
+from rest_framework.response import Response
+from rest_framework import status
+from .models import PettyCash
+from .serializers import PettyCashSerializer
+
+
+@api_view(['GET'])
+def list_pettycash(request):
+    """List all petty cash records"""
+    records = PettyCash.objects.all().order_by('-created_at')
+    serializer = PettyCashSerializer(records, many=True)
+    return Response(serializer.data)
+
+
+@api_view(['POST'])
+def create_pettycash(request):
+    """Create a new petty cash record"""
+    serializer = PettyCashSerializer(data=request.data)
+    if serializer.is_valid():
+        serializer.save()
+        return Response(serializer.data, status=status.HTTP_201_CREATED)
+    return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+
+@api_view(['GET'])
+def get_pettycash(request, id):
+    """Retrieve a specific petty cash record by ID"""
+    try:
+        record = PettyCash.objects.get(id=id)
+    except PettyCash.DoesNotExist:
+        return Response({'error': 'Petty cash record not found.'}, status=status.HTTP_404_NOT_FOUND)
+    
+    serializer = PettyCashSerializer(record)
+    return Response(serializer.data)
+
+
+@api_view(['PATCH'])
+def update_pettycash(request, id):
+    """Update (partial) a petty cash record"""
+    try:
+        record = PettyCash.objects.get(id=id)
+    except PettyCash.DoesNotExist:
+        return Response({'error': 'Petty cash record not found.'}, status=status.HTTP_404_NOT_FOUND)
+    
+    serializer = PettyCashSerializer(record, data=request.data, partial=True)
+    if serializer.is_valid():
+        serializer.save()
+        return Response(serializer.data)
+    return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+
+@api_view(['DELETE'])
+def delete_pettycash(request, id):
+    """Delete a petty cash record"""
+    try:
+        record = PettyCash.objects.get(id=id)
+    except PettyCash.DoesNotExist:
+        return Response({'error': 'Petty cash record not found.'}, status=status.HTTP_404_NOT_FOUND)
+    
+    record.delete()
+    return Response({'message': 'Petty cash record deleted successfully.'}, status=status.HTTP_204_NO_CONTENT)
