@@ -16,7 +16,7 @@ from accounts.views import (
     attendance_page, mark_office_attendance_view, mark_work_attendance_view, mark_absent_employees, RequestPasswordResetView, PasswordResetConfirmView,
     appointment_letter, offer_letter, releaving_letter, bonafide_certificate, TicketViewSet, 
     HolidayViewSet, list_absent_employees, CareerViewSet, AppliedJobViewSet, 
-    transfer_to_releaved, approve_releaved, list_releaved_employees, get_releaved_employee, ReleavedEmployeeViewSet
+    transfer_to_releaved, approve_releaved, list_releaved_employees, get_releaved_employee, ReleavedEmployeeViewSet, PettyCashViewSet
 )
 
 urlpatterns = [
@@ -132,4 +132,7 @@ urlpatterns = [
     path('raise_attendance/', raise_attendance_request, name='raise-attendance-request'),
     path('attendance_requests/', list_attendance_requests, name='list-attendance-requests'),
     path('attendance_requests/<int:pk>/', review_attendance_request, name='review-attendance-request'),
+
+    path('pettycash/', PettyCashViewSet.as_view({'get': 'list', 'post': 'create'})),
+    path('pettycash/<int:pk>/', PettyCashViewSet.as_view({'get': 'retrieve', 'patch': 'partial_update', 'delete': 'destroy'})),
 ]

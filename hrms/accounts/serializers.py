@@ -1,5 +1,5 @@
 from rest_framework import serializers
-from .models import User, CEO, HR, Manager, Employee, Admin, Leave, Attendance, Report, Project, Notice, Document, Award, Department, Ticket, EmployeeDetails, Holiday, AbsentEmployeeDetails, AppliedJobs, JobPosting, ReleavedEmployee
+from .models import User, CEO, HR, Manager, Employee, Admin, Leave, Attendance, Report, Project, Notice, Document, Award, Department, Ticket, EmployeeDetails, Holiday, AbsentEmployeeDetails, AppliedJobs, JobPosting, ReleavedEmployee, PettyCash
 from typing import Any, Dict, Optional, TYPE_CHECKING
 
 if TYPE_CHECKING:
@@ -234,4 +234,9 @@ class AppliedJobSerializer(serializers.ModelSerializer):
 class ReleavedEmployeeSerializer(serializers.ModelSerializer):
     class Meta:  # type: ignore
         model = ReleavedEmployee
+        fields = '__all__'
+
+class PettyCashSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = PettyCash
         fields = '__all__'

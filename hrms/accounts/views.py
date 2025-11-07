@@ -39,15 +39,14 @@ from .models import (
     User, CEO, HR, Manager, Department, Employee, Attendance, Admin,
     Leave, Payroll, TaskTable, Project, Notice, Report,
     Document, Award, Ticket, EmployeeDetails, ReleavedEmployee, Holiday, AbsentEmployeeDetails, AppliedJobs, 
-    RaiseRequestAttendance,
-    JobPosting
+    RaiseRequestAttendance, JobPosting, PettyCash
 )
 
 # Serializers
 from .serializers import (
     UserSerializer, CEOSerializer, HRSerializer, ManagerSerializer, DepartmentSerializer,
     EmployeeSerializer, SuperUserCreateSerializer, UserRegistrationSerializer, ProjectSerializer,
-    AdminSerializer, ReportSerializer, RegisterSerializer, DocumentSerializer, AwardSerializer, TicketSerializer, EmployeeDetailsSerializer, HolidaySerializer, AbsentEmployeeDetailsSerializer, CareerSerializer, AppliedJobSerializer, ReleavedEmployeeSerializer
+    AdminSerializer, ReportSerializer, RegisterSerializer, DocumentSerializer, AwardSerializer, TicketSerializer, EmployeeDetailsSerializer, HolidaySerializer, AbsentEmployeeDetailsSerializer, CareerSerializer, AppliedJobSerializer, ReleavedEmployeeSerializer, PettyCashSerializer
 )
 
 # Ensure User model points to custom one
@@ -3525,3 +3524,11 @@ def get_releaved_employee(request, pk):
             "error": "Relieved employee not found.",
             "id": pk
         }, status=status.HTTP_404_NOT_FOUND)
+
+class PettyCashViewSet(viewsets.ModelViewSet):
+    queryset = PettyCash.objects.all()
+    serializer_class = PettyCashSerializer
+    permission_classes = [AllowAny]
+
+    def perform_create(self, serializer):
+        serializer.save(email=self.request.user)

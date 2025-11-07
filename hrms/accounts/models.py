@@ -676,3 +676,62 @@ class JobPosting(models.Model):
 
     def __str__(self):
         return f"{self.title} ({self.department})"
+
+class PettyCash(models.Model):
+    TRANSACTION_TYPE_CHOICES = [
+        ('Credit', 'Credit'),
+        ('Debit', 'Debit'),
+    ]
+    
+    CATEGORY_CHOICES = [
+        ('Office Supplies', 'Office Supplies'),
+        ('Travel', 'Travel'),
+        ('Utilities', 'Utilities'),
+        ('Maintenance', 'Maintenance'),
+        ('Refreshments', 'Refreshments'),
+        ('Miscellaneous', 'Miscellaneous'),
+        ('Monthly Fund', 'Monthly Fund'),
+        ('Salary Advance', 'Salary Advance'),
+        ('Emergency', 'Emergency'),
+    ]
+    
+    id = models.AutoField(primary_key=True)
+    email = models.ForeignKey(User, on_delete=models.CASCADE, to_field='email')
+    date = models.DateField()
+    description = models.TextField()
+    category = models.CharField(max_length=50, choices=CATEGORY_CHOICES)
+    transaction_type = models.CharField(max_length=10, choices=TRANSACTION_TYPE_CHOICES)
+    amount = models.DecimalField(max_digits=10, decimal_places=2)
+    balance = models.DecimalField(max_digits=10, decimal_places=2, default=0.00)
+    voucher_no = models.CharField(max_length=50, blank=True, null=True)
+    status = models.CharField(
+        max_length=20,
+        choices=[
+            ('Pending', 'Pending'),
+            ('Approved', 'Approved'),
+            ('Rejected', 'Rejected')
+        ],
+        default='Pending'
+    )
+    approved_by = models.ForeignKey(
+        User, 
+        on_delete=models.SET_NULL, 
+        null=True, 
+        blank=True, 
+        related_name='pettycash_approvals'
+    )
+    remarks = models.TextField(blank=True, null=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+    approved_at = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        ordering = ['-created_at']
+        verbose_name = "Petty Cash"
+        verbose_name_plural = "Petty Cash Records"
+
+    def save(self, *args, **kwargs):
+        super().save(*args, **kwargs)
+
+    def __str__(self):
+        return f"PettyCash #{self.id} - {self.fullname or self.email.email} ({self.amount})"
