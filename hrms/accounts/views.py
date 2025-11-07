@@ -1792,8 +1792,19 @@ IST = timezone.get_fixed_timezone(330)  # IST is UTC+5:30
 CHECK_IN_DEADLINE = time(10, 45)  # 10:45 AM
 LOCATION_RADIUS_METERS = 1000  # 100 meters
 
+def get_all_users_with_photos():
+    """Return all users from Employee, HR, CEO, Manager, and Admin models that have profile pictures."""
+    from accounts.models import Employee, HR, CEO, Manager, Admin
 
-# info: python hrms/accounts/views.py
+    user_types = [Employee, HR, CEO, Manager, Admin]
+    all_users = []
+
+    for model in user_types:
+        all_users += list(model.objects.exclude(profile_picture__isnull=True).exclude(profile_picture=""))
+    
+    return all_users
+
+
 @api_view(['POST'])
 @permission_classes([AllowAny])
 def mark_office_attendance_view(request):
@@ -1801,194 +1812,21 @@ def mark_office_attendance_view(request):
     try:
         latitude = request.POST.get("latitude")
         longitude = request.POST.get("longitude")
+
         if latitude is None or longitude is None:
             return JsonResponse({"status": "fail", "message": "Latitude and longitude required"}, status=400)
+
         try:
             latitude = float(latitude)
             longitude = float(longitude)
         except ValueError:
             return JsonResponse({"status": "fail", "message": "Invalid latitude or longitude"}, status=400)
-        uploaded_file = request.FILES.get('image')
-        if not uploaded_file:
-            return JsonResponse({"status": "fail", "message": "No image provided"}, status=400)
-
-        # Save the uploaded image temporarily
-        with tempfile.NamedTemporaryFile(delete=False, suffix=".jpg") as tmp:
-            for chunk in uploaded_file.chunks():
-                tmp.write(chunk)
-            tmp_path = tmp.name
-
-        uploaded_img = face_recognition.load_image_file(tmp_path)
-        uploaded_encodings = face_recognition.face_encodings(uploaded_img)
-        if not uploaded_encodings:
-            os.remove(tmp_path)
-            return JsonResponse({"status": "fail", "message": "No face detected"}, status=400)
-
-        uploaded_encoding = uploaded_encodings[0]
-
-        # Current date/time in IST (used later in matched-employee branch)
-        now_ist = timezone.localtime(timezone.now(), IST)
-        today = now_ist.date()
-        current_time = now_ist.time()
-
-        # Iterate through all relevant user models
-        user_models = [Employee, HR, CEO, Manager, Admin]  # Add all relevant models
-        matched_user = None # Variable to store the matched user
-
-        for model in user_models:
-            for user in model.objects.all(): # Changed emp to user
-                if not user.profile_picture:
-                    continue
-
-                # Download the profile picture from MinIO URL
-                try:
-                    response = requests.get(user.profile_picture, timeout=10)
-                    if response.status_code != 200:
-                        continue
-
-                    with tempfile.NamedTemporaryFile(delete=False, suffix=".jpg") as emp_tmp:
-                        emp_tmp.write(response.content)
-                        emp_tmp_path = emp_tmp.name
-
-                    emp_img = face_recognition.load_image_file(emp_tmp_path)
-                    emp_encodings = face_recognition.face_encodings(emp_img)
-                    os.remove(emp_tmp_path)
-
-                    if not emp_encodings:
-                        continue
-
-                    emp_encoding = emp_encodings[0]
-                    match = face_recognition.compare_faces([emp_encoding], uploaded_encoding, tolerance=0.5)
-
-                    if match[0]:
-                        # ✅ Store matched user and break inner loop
-                        matched_user = user
-                        break  # Exit the inner loop (user loop)
-
-                except Exception as err:
-                    print(f"Error processing {user.email}: {err}") # Changed emp to user
-                    continue
-
-            if matched_user:
-                break  # Exit the outer loop (model loop)
-
-        if matched_user:
-            # Location verification (100m for office)
-            is_within_radius, distance_meters = verify_location(latitude, longitude, LOCATION_RADIUS_METERS)
-
-            if not is_within_radius:
-                os.remove(tmp_path)
-                return JsonResponse({
-                    "status": "fail",
-                    "message": f"User too far from office ({distance_meters:.2f} meters). Must be within {LOCATION_RADIUS_METERS}m."
-                }, status=400)
-
-            # Mark attendance with time-window enforcement per user
-            now_ist = timezone.localtime(timezone.now(), IST)
-            today = now_ist.date()
-            now_time = now_ist.time()
-
-            # If an attendance record already exists, allow checkout anytime
-            existing = Attendance.objects.filter(email=matched_user.email, date=today).first() # Changed emp to matched_user
-            if existing:
-                if existing.check_out:
-                    msg = f"Attendance already marked for today ({matched_user.fullname})" # Changed emp to matched_user
-                else:
-                    existing.check_out = now_time
-                    existing.latitude = latitude
-                    existing.longitude = longitude
-                    existing.location_type = "office"
-                    existing.save()
-                    msg = f"Office check-out marked for {matched_user.fullname}" # Changed emp to matched_user
-                os.remove(tmp_path)
-                return JsonResponse({"status": "success", "message": msg})
-
-            # Determine if deadline applies (Mon-Sat and not a holiday)
-            enforce_deadline = True
-            if today.weekday() == 6:
-                enforce_deadline = False  # Sunday
-            else:
-                from accounts.models import Holiday
-                if Holiday.objects.filter(date=today).exists():
-                    enforce_deadline = False  # Holiday
-
-            # If before 07:00 and no prior attendance, block early check-in
-            if now_time < CHECK_IN_START:
-                os.remove(tmp_path)
-                return JsonResponse({
-                    "status": "fail",
-                    "message": "Check-in opens at 07:00 AM IST. Please try after 07:00."
-                }, status=400)
-
-            # If past deadline and no prior attendance, mark absent instead of creating check-in
-            if enforce_deadline and now_time > CHECK_IN_DEADLINE:
-                # First attempt after deadline -> mark absent
-                AbsentEmployeeDetails.objects.get_or_create(email=matched_user.email, date=today) # Changed emp to matched_user
-                os.remove(tmp_path)
-                return JsonResponse({
-                    "status": "fail",
-                    "message": "Late first attempt. Marked absent for today as no check-in before 10:45 AM IST."
-                }, status=400)
-            else:
-                # Within window or exempt day -> proceed with check-in/checkout logic
-                obj, created = Attendance.objects.get_or_create(
-                    email=matched_user.email, # Changed emp to matched_user
-                    date=today,
-                    defaults={
-                        "check_in": now_time,
-                        "latitude": latitude,
-                        "longitude": longitude,
-                        "location_type": "office"
-                    }
-                )
-
-                if created:
-                    msg = f"Office check-in marked for {matched_user.fullname}" # Changed emp to matched_user
-                else:
-                    if obj.check_out:
-                        msg = f"Attendance already marked for today ({matched_user.fullname})" # Changed emp to matched_user
-                    else:
-                        obj.check_out = now_time
-                        obj.latitude = latitude
-                        obj.longitude = longitude
-                        obj.location_type = "office"
-                        obj.save()
-                        msg = f"Office check-out marked for {matched_user.fullname}" # Changed emp to matched_user
-
-                os.remove(tmp_path)
-                return JsonResponse({"status": "success", "message": msg})
-        else:
-            os.remove(tmp_path)
-            return JsonResponse({"status": "fail", "message": "No match found"}, status=404)
-
-    except Exception as e:
-        return JsonResponse({"status": "error", "message": str(e)}, status=500)
-
-
-# info: python hrms/accounts/views.py
-@api_view(['POST'])
-@permission_classes([AllowAny])
-def mark_work_attendance_view(request):
-    """Mark attendance for work from home (no location restriction)"""
-    try:
-        # Get optional latitude and longitude (not required for WFH)
-        latitude = request.POST.get("latitude")
-        longitude = request.POST.get("longitude")
-
-        # Convert to float if provided
-        if latitude and longitude:
-            try:
-                latitude = float(latitude)
-                longitude = float(longitude)
-            except ValueError:
-                latitude = None
-                longitude = None
 
         uploaded_file = request.FILES.get('image')
         if not uploaded_file:
             return JsonResponse({"status": "fail", "message": "No image provided"}, status=400)
 
-        # Save the uploaded image temporarily
+        # Save uploaded image temporarily
         with tempfile.NamedTemporaryFile(delete=False, suffix=".jpg") as tmp:
             for chunk in uploaded_file.chunks():
                 tmp.write(chunk)
@@ -2007,7 +1845,163 @@ def mark_work_attendance_view(request):
         today = now_ist.date()
         current_time = now_ist.time()
 
-        # If before 07:00, block early attempts globally
+        # Loop through all user types
+        people = get_all_users_with_photos()
+        for person in people:
+            if not person.profile_picture:
+                continue
+
+            try:
+                response = requests.get(person.profile_picture, timeout=10)
+                if response.status_code != 200:
+                    continue
+
+                with tempfile.NamedTemporaryFile(delete=False, suffix=".jpg") as emp_tmp:
+                    emp_tmp.write(response.content)
+                    emp_tmp_path = emp_tmp.name
+
+                emp_img = face_recognition.load_image_file(emp_tmp_path)
+                emp_encodings = face_recognition.face_encodings(emp_img)
+                os.remove(emp_tmp_path)
+
+                if not emp_encodings:
+                    continue
+
+                emp_encoding = emp_encodings[0]
+                match = face_recognition.compare_faces([emp_encoding], uploaded_encoding, tolerance=0.5)
+
+                if match[0]:
+                    # Verify location (office radius)
+                    is_within_radius, distance_meters = verify_location(latitude, longitude, LOCATION_RADIUS_METERS)
+
+                    if not is_within_radius:
+                        os.remove(tmp_path)
+                        return JsonResponse({
+                            "status": "fail",
+                            "message": f"User too far from office ({distance_meters:.2f} meters). Must be within {LOCATION_RADIUS_METERS}m."
+                        }, status=400)
+
+                    now_ist = timezone.localtime(timezone.now(), IST)
+                    today = now_ist.date()
+                    now_time = now_ist.time()
+
+                    existing = Attendance.objects.filter(email=person.email, date=today).first()
+                    if existing:
+                        if existing.check_out:
+                            msg = f"Attendance already marked for today ({person.fullname})"
+                        else:
+                            existing.check_out = now_time
+                            existing.latitude = latitude
+                            existing.longitude = longitude
+                            existing.location_type = "office"
+                            existing.save()
+                            msg = f"Office check-out marked for {person.fullname}"
+                        os.remove(tmp_path)
+                        return JsonResponse({"status": "success", "message": msg})
+
+                    # Check if deadline applies (Mon-Sat, not holiday)
+                    enforce_deadline = True
+                    if today.weekday() == 6:
+                        enforce_deadline = False
+                    else:
+                        from accounts.models import Holiday
+                        if Holiday.objects.filter(date=today).exists():
+                            enforce_deadline = False
+
+                    # Block before 7 AM
+                    if now_time < CHECK_IN_START:
+                        os.remove(tmp_path)
+                        return JsonResponse({
+                            "status": "fail",
+                            "message": "Check-in opens at 07:00 AM IST. Please try after 07:00."
+                        }, status=400)
+
+                    # Mark absent if first attempt after deadline
+                    if enforce_deadline and now_time > CHECK_IN_DEADLINE:
+                        AbsentEmployeeDetails.objects.get_or_create(email=person.email, date=today)
+                        os.remove(tmp_path)
+                        return JsonResponse({
+                            "status": "fail",
+                            "message": "Late first attempt. Marked absent for today as no check-in before 10:45 AM IST."
+                        }, status=400)
+
+                    # Otherwise, mark attendance
+                    obj, created = Attendance.objects.get_or_create(
+                        email=person.email,
+                        date=today,
+                        defaults={
+                            "check_in": now_time,
+                            "latitude": latitude,
+                            "longitude": longitude,
+                            "location_type": "office",
+                            "role": person.__class__.__name__  # store role name (Employee, HR, etc.)
+                        }
+                    )
+
+                    if created:
+                        msg = f"Office check-in marked for {person.fullname}"
+                    else:
+                        if obj.check_out:
+                            msg = f"Attendance already marked for today ({person.fullname})"
+                        else:
+                            obj.check_out = now_time
+                            obj.latitude = latitude
+                            obj.longitude = longitude
+                            obj.location_type = "office"
+                            obj.save()
+                            msg = f"Office check-out marked for {person.fullname}"
+
+                    os.remove(tmp_path)
+                    return JsonResponse({"status": "success", "message": msg})
+
+            except Exception as err:
+                print(f"Error processing {person.email}: {err}")
+                continue
+
+        os.remove(tmp_path)
+        return JsonResponse({"status": "fail", "message": "No match found"}, status=404)
+
+    except Exception as e:
+        return JsonResponse({"status": "error", "message": str(e)}, status=500)
+
+
+@api_view(['POST'])
+@permission_classes([AllowAny])
+def mark_work_attendance_view(request):
+    """Mark attendance for work from home (no location restriction)"""
+    try:
+        latitude = request.POST.get("latitude")
+        longitude = request.POST.get("longitude")
+
+        # Convert if provided
+        if latitude and longitude:
+            try:
+                latitude = float(latitude)
+                longitude = float(longitude)
+            except ValueError:
+                latitude = None
+                longitude = None
+
+        uploaded_file = request.FILES.get('image')
+        if not uploaded_file:
+            return JsonResponse({"status": "fail", "message": "No image provided"}, status=400)
+
+        with tempfile.NamedTemporaryFile(delete=False, suffix=".jpg") as tmp:
+            for chunk in uploaded_file.chunks():
+                tmp.write(chunk)
+            tmp_path = tmp.name
+
+        uploaded_img = face_recognition.load_image_file(tmp_path)
+        uploaded_encodings = face_recognition.face_encodings(uploaded_img)
+        if not uploaded_encodings:
+            os.remove(tmp_path)
+            return JsonResponse({"status": "fail", "message": "No face detected"}, status=400)
+
+        uploaded_encoding = uploaded_encodings[0]
+        now_ist = timezone.localtime(timezone.now(), IST)
+        today = now_ist.date()
+        current_time = now_ist.time()
+
         if current_time < CHECK_IN_START:
             os.remove(tmp_path)
             return JsonResponse({
@@ -2015,124 +2009,109 @@ def mark_work_attendance_view(request):
                 "message": "Check-in opens at 07:00 AM IST. Please try after 07:00."
             }, status=400)
 
-        # Iterate through all relevant user models
-        user_models = [Employee, HR, CEO, Manager, Admin]  # Add all relevant models
-        matched_user = None
+        # Loop through all user types
+        people = get_all_users_with_photos()
+        for person in people:
+            if not person.profile_picture:
+                continue
 
-        for model in user_models:
-            for user in model.objects.all():
-                if not user.profile_picture:
+            try:
+                response = requests.get(person.profile_picture, timeout=10)
+                if response.status_code != 200:
                     continue
 
-                # Download the profile picture from MinIO URL
-                try:
-                    response = requests.get(user.profile_picture, timeout=10)
-                    if response.status_code != 200:
-                        continue
+                with tempfile.NamedTemporaryFile(delete=False, suffix=".jpg") as emp_tmp:
+                    emp_tmp.write(response.content)
+                    emp_tmp_path = emp_tmp.name
 
-                    with tempfile.NamedTemporaryFile(delete=False, suffix=".jpg") as emp_tmp:
-                        emp_tmp.write(response.content)
-                        emp_tmp_path = emp_tmp.name
+                emp_img = face_recognition.load_image_file(emp_tmp_path)
+                emp_encodings = face_recognition.face_encodings(emp_img)
+                os.remove(emp_tmp_path)
 
-                    emp_img = face_recognition.load_image_file(emp_tmp_path)
-                    emp_encodings = face_recognition.face_encodings(emp_img)
-                    os.remove(emp_tmp_path)
-
-                    if not emp_encodings:
-                        continue
-
-                    emp_encoding = emp_encodings[0]
-                    match = face_recognition.compare_faces([emp_encoding], uploaded_encoding, tolerance=0.5)
-
-                    if match[0]:
-                        matched_user = user
-                        break
-
-                except Exception as err:
-                    print(f"Error processing {user.email}: {err}")
+                if not emp_encodings:
                     continue
-            if matched_user:
-                break
 
-        if matched_user:
-            # Mark attendance (no location verification for WFH) with time-window enforcement
-            now_ist = timezone.localtime(timezone.now(), IST)
-            today = now_ist.date()
-            now_time = now_ist.time()
+                emp_encoding = emp_encodings[0]
+                match = face_recognition.compare_faces([emp_encoding], uploaded_encoding, tolerance=0.5)
 
-            # If an attendance record already exists, allow checkout anytime
-            existing = Attendance.objects.filter(email=matched_user.email, date=today).first()
-            if existing:
-                if existing.check_out:
-                    msg = f"Attendance already marked for today ({matched_user.fullname})"
-                else:
-                    existing.check_out = now_time
-                    existing.longitude = longitude
-                    existing.location_type = "work"
-                    existing.save()
-                    msg = f"Work from outside check-out marked for {matched_user.fullname}"
-                os.remove(tmp_path)
-                return JsonResponse({"status": "success", "message": msg})
+                if match[0]:
+                    now_ist = timezone.localtime(timezone.now(), IST)
+                    today = now_ist.date()
+                    now_time = now_ist.time()
 
-            # Determine if deadline applies (Mon-Sat and not a holiday)
-            enforce_deadline = True
-            if today.weekday() == 6:
-                enforce_deadline = False  # Sunday
-            else:
-                from accounts.models import Holiday
-                if Holiday.objects.filter(date=today).exists():
-                    enforce_deadline = False  # Holiday
+                    existing = Attendance.objects.filter(email=person.email, date=today).first()
+                    if existing:
+                        if existing.check_out:
+                            msg = f"Attendance already marked for today ({person.fullname})"
+                        else:
+                            existing.check_out = now_time
+                            existing.longitude = longitude
+                            existing.location_type = "work"
+                            existing.save()
+                            msg = f"Work from home check-out marked for {person.fullname}"
+                        os.remove(tmp_path)
+                        return JsonResponse({"status": "success", "message": msg})
 
-            # If before 07:00 and no prior attendance, block early check-in
-            if now_time < CHECK_IN_START:
-                os.remove(tmp_path)
-                return JsonResponse({
-                    "status": "fail",
-                    "message": "Check-in opens at 07:00 AM IST. Please try after 07:00."
-                }, status=400)
-
-            # If past deadline and no prior attendance, mark absent instead of creating check-in
-            if enforce_deadline and now_time > CHECK_IN_DEADLINE:
-                # First attempt after deadline -> mark absent
-                AbsentEmployeeDetails.objects.get_or_create(email=matched_user.email, date=today)
-                os.remove(tmp_path)
-                return JsonResponse({
-                    "status": "fail",
-                    "message": "Late first attempt. Marked absent for today as no check-in before 10:45 AM IST."
-                }, status=400)
-            else:
-                # Within window or exempt day -> proceed with check-in/checkout logic
-                obj, created = Attendance.objects.get_or_create(
-                    email=matched_user.email,
-                    date=today,
-                    defaults={
-                        "check_in": now_time,
-                        "latitude": latitude,
-                        "longitude": longitude,
-                        "location_type": "work"
-                    }
-                )
-
-                if created:
-                    msg = f"Work from outside check-in marked for {matched_user.fullname}"
-                else:
-                    if obj.check_out:
-                        msg = f"Attendance already marked for today ({matched_user.fullname})"
+                    enforce_deadline = True
+                    if today.weekday() == 6:
+                        enforce_deadline = False
                     else:
-                        obj.check_out = now_time
-                        obj.longitude = longitude
-                        obj.location_type = "work"
-                        obj.save()
-                        msg = f"Work from outside check-out marked for {matched_user.fullname}"
+                        from accounts.models import Holiday
+                        if Holiday.objects.filter(date=today).exists():
+                            enforce_deadline = False
 
-                os.remove(tmp_path)
-                return JsonResponse({"status": "success", "message": msg})
-        else:
-            os.remove(tmp_path)
-            return JsonResponse({"status": "fail", "message": "No match found"}, status=404)
+                    if now_time < CHECK_IN_START:
+                        os.remove(tmp_path)
+                        return JsonResponse({
+                            "status": "fail",
+                            "message": "Check-in opens at 07:00 AM IST. Please try after 07:00."
+                        }, status=400)
+
+                    if enforce_deadline and now_time > CHECK_IN_DEADLINE:
+                        AbsentEmployeeDetails.objects.get_or_create(email=person.email, date=today)
+                        os.remove(tmp_path)
+                        return JsonResponse({
+                            "status": "fail",
+                            "message": "Late first attempt. Marked absent for today as no check-in before 10:45 AM IST."
+                        }, status=400)
+
+                    obj, created = Attendance.objects.get_or_create(
+                        email=person.email,
+                        date=today,
+                        defaults={
+                            "check_in": now_time,
+                            "latitude": latitude,
+                            "longitude": longitude,
+                            "location_type": "work",
+                            "role": person.__class__.__name__
+                        }
+                    )
+
+                    if created:
+                        msg = f"Work from home check-in marked for {person.fullname}"
+                    else:
+                        if obj.check_out:
+                            msg = f"Attendance already marked for today ({person.fullname})"
+                        else:
+                            obj.check_out = now_time
+                            obj.longitude = longitude
+                            obj.location_type = "work"
+                            obj.save()
+                            msg = f"Work from home check-out marked for {person.fullname}"
+
+                    os.remove(tmp_path)
+                    return JsonResponse({"status": "success", "message": msg})
+
+            except Exception as err:
+                print(f"Error processing {person.email}: {err}")
+                continue
+
+        os.remove(tmp_path)
+        return JsonResponse({"status": "fail", "message": "No match found"}, status=404)
 
     except Exception as e:
         return JsonResponse({"status": "error", "message": str(e)}, status=500)
+
 
 @api_view(['POST'])
 @permission_classes([AllowAny])
