@@ -1934,7 +1934,6 @@ def mark_office_attendance_view(request):
                             "latitude": latitude,
                             "longitude": longitude,
                             "location_type": "office",
-                            "role": person.__class__.__name__  # store role name (Employee, HR, etc.)
                         }
                     )
 
@@ -2083,7 +2082,6 @@ def mark_work_attendance_view(request):
                             "latitude": latitude,
                             "longitude": longitude,
                             "location_type": "work",
-                            "role": person.__class__.__name__
                         }
                     )
 
