@@ -15,9 +15,15 @@ from pathlib import Path
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
 
+# Load environment variables from .env.local if it exists, otherwise use .env
+env_local_path = os.path.join(BASE_DIR, '.env.local')
+if os.path.exists(env_local_path):
+    from decouple import AutoConfig
+    config = AutoConfig(search_path=BASE_DIR)
+else:
+    from decouple import config
 
 # SECURITY WARNING: keep the secret key used in production secret!
-from decouple import config
 SECRET_KEY = config('DJANGO_SECRET_KEY')
 
 # SECURITY WARNING: don't run with debug turned on in production!
