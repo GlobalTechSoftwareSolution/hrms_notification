@@ -11,6 +11,7 @@ venv/
 venv
 
 # Environment files
+.env
 .env.local
 
 # Django stuff:
