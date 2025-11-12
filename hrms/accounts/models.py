@@ -734,4 +734,47 @@ class PettyCash(models.Model):
         super().save(*args, **kwargs)
 
     def __str__(self):
-        return f"PettyCash #{self.id} - {self.fullname or self.email.email} ({self.amount})"
+        return f"PettyCash #{self.id} - {self.email.email} ({self.amount})"
+
+
+# ------------------- NOTIFICATIONS -------------------
+class FCMToken(models.Model):
+    """
+    Model to store Firebase Cloud Messaging tokens for users
+    """
+    id = models.AutoField(primary_key=True)
+    user = models.ForeignKey(User, on_delete=models.CASCADE, to_field='email')
+    token = models.TextField()
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+    is_active = models.BooleanField(default=True)
+
+    class Meta:
+        unique_together = ('user', 'token')
+        verbose_name = "FCM Token"
+        verbose_name_plural = "FCM Tokens"
+
+    def __str__(self):
+        return f"FCM Token for {self.user.email}"
+
+
+class Notification(models.Model):
+    """
+    Model to store notification history
+    """
+    id = models.AutoField(primary_key=True)
+    user = models.ForeignKey(User, on_delete=models.CASCADE, to_field='email')
+    title = models.CharField(max_length=255)
+    body = models.TextField()
+    data = models.JSONField(default=dict, blank=True)
+    is_read = models.BooleanField(default=False)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ['-created_at']
+        verbose_name = "Notification"
+        verbose_name_plural = "Notifications"
+
+    def __str__(self):
+        return f"Notification for {self.user.email}: {self.title}"

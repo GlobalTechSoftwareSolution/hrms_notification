@@ -1,5 +1,5 @@
 from rest_framework import serializers
-from .models import User, CEO, HR, Manager, Employee, Admin, Leave, Attendance, Report, Project, Notice, Document, Award, Department, Ticket, EmployeeDetails, Holiday, AbsentEmployeeDetails, AppliedJobs, JobPosting, ReleavedEmployee, PettyCash
+from .models import User, CEO, HR, Manager, Employee, Admin, Leave, Attendance, Report, Project, Notice, Document, Award, Department, Ticket, EmployeeDetails, Holiday, AbsentEmployeeDetails, AppliedJobs, JobPosting, ReleavedEmployee, PettyCash, FCMToken, Notification
 from typing import Any, Dict, Optional, TYPE_CHECKING
 
 if TYPE_CHECKING:
@@ -237,6 +237,20 @@ class ReleavedEmployeeSerializer(serializers.ModelSerializer):
         fields = '__all__'
 
 class PettyCashSerializer(serializers.ModelSerializer):
-    class Meta:
+    class Meta:  # type: ignore
         model = PettyCash
         fields = '__all__'
+
+
+class FCMTokenSerializer(serializers.ModelSerializer):
+    class Meta:  # type: ignore
+        model = FCMToken
+        fields = ['id', 'token', 'created_at', 'updated_at', 'is_active']
+        read_only_fields = ['id', 'created_at', 'updated_at']
+
+
+class NotificationSerializer(serializers.ModelSerializer):
+    class Meta:  # type: ignore
+        model = Notification
+        fields = ['id', 'title', 'body', 'data', 'is_read', 'created_at', 'updated_at']
+        read_only_fields = ['id', 'created_at', 'updated_at']

@@ -39,14 +39,14 @@ from .models import (
     User, CEO, HR, Manager, Department, Employee, Attendance, Admin,
     Leave, Payroll, TaskTable, Project, Notice, Report,
     Document, Award, Ticket, EmployeeDetails, ReleavedEmployee, Holiday, AbsentEmployeeDetails, AppliedJobs, 
-    RaiseRequestAttendance, JobPosting, PettyCash
+    RaiseRequestAttendance, JobPosting, PettyCash, FCMToken, Notification
 )
 
 # Serializers
 from .serializers import (
     UserSerializer, CEOSerializer, HRSerializer, ManagerSerializer, DepartmentSerializer,
     EmployeeSerializer, SuperUserCreateSerializer, UserRegistrationSerializer, ProjectSerializer,
-    AdminSerializer, ReportSerializer, RegisterSerializer, DocumentSerializer, AwardSerializer, TicketSerializer, EmployeeDetailsSerializer, HolidaySerializer, AbsentEmployeeDetailsSerializer, CareerSerializer, AppliedJobSerializer, ReleavedEmployeeSerializer, PettyCashSerializer
+    AdminSerializer, ReportSerializer, RegisterSerializer, DocumentSerializer, AwardSerializer, TicketSerializer, EmployeeDetailsSerializer, HolidaySerializer, AbsentEmployeeDetailsSerializer, CareerSerializer, AppliedJobSerializer, ReleavedEmployeeSerializer, PettyCashSerializer, FCMTokenSerializer, NotificationSerializer
 )
 
 # Ensure User model points to custom one
@@ -1787,6 +1787,31 @@ class TicketViewSet(viewsets.ModelViewSet):
     def get_queryset(self):
         return Ticket.objects.all()
 
+    def perform_create(self, serializer):
+        # Save the ticket first
+        ticket = serializer.save()
+        
+        # Send notification for ticket assignment
+        try:
+            from .notification_service import send_ticket_notification
+            send_ticket_notification(ticket, "assigned")
+        except Exception as e:
+            print(f"Failed to send ticket assignment notification: {str(e)}")
+
+    def perform_update(self, serializer):
+        # Save the ticket update
+        ticket = serializer.save()
+        
+        # Send notification for ticket update
+        try:
+            from .notification_service import send_ticket_notification
+            # Check if status changed to closed
+            if ticket.status == 'Closed':
+                send_ticket_notification(ticket, "closed")
+            else:
+                send_ticket_notification(ticket, "updated")
+        except Exception as e:
+            print(f"Failed to send ticket update notification: {str(e)}")
 
 IST = timezone.get_fixed_timezone(330)  # IST is UTC+5:30
 CHECK_IN_DEADLINE = time(10, 45)  # 10:45 AM
@@ -3585,3 +3610,149 @@ def delete_pettycash(request, id):
     
     record.delete()
     return Response({'message': 'Petty cash record deleted successfully.'}, status=status.HTTP_204_NO_CONTENT)
+
+
+# ------------------- NOTIFICATION VIEWS -------------------
+@csrf_exempt
+@api_view(['POST'])
+@permission_classes([AllowAny])
+def register_fcm_token(request):
+    """
+    Register FCM token for a user
+    """
+    try:
+        # Check if request body is empty
+        if not request.body:
+            return JsonResponse({'error': 'Request body is empty'}, status=400)
+        
+        # Try to parse JSON data
+        try:
+            data = json.loads(request.body)
+        except json.JSONDecodeError as e:
+            return JsonResponse({'error': f'Invalid JSON format: {str(e)}'}, status=400)
+        
+        email = data.get('email')
+        token = data.get('token')
+        
+        if not email or not token:
+            return JsonResponse({'error': 'Email and token are required'}, status=400)
+        
+        try:
+            user = User.objects.get(email=email)
+        except User.DoesNotExist:
+            return JsonResponse({'error': 'User not found'}, status=404)
+        
+        # Create or update FCM token
+        fcm_token, created = FCMToken.objects.update_or_create(
+            user=user,
+            token=token,
+            defaults={'is_active': True}
+        )
+        
+        if created:
+            message = 'FCM token registered successfully'
+        else:
+            message = 'FCM token updated successfully'
+            
+        return JsonResponse({
+            'message': message,
+            'token_id': fcm_token.id
+        }, status=200)
+        
+    except Exception as e:
+        return JsonResponse({'error': str(e)}, status=500)
+
+
+@csrf_exempt
+@api_view(['POST'])
+@permission_classes([AllowAny])
+def unregister_fcm_token(request):
+    """
+    Unregister FCM token for a user
+    """
+    try:
+        # Check if request body is empty
+        if not request.body:
+            return JsonResponse({'error': 'Request body is empty'}, status=400)
+        
+        # Try to parse JSON data
+        try:
+            data = json.loads(request.body)
+        except json.JSONDecodeError as e:
+            return JsonResponse({'error': f'Invalid JSON format: {str(e)}'}, status=400)
+        
+        email = data.get('email')
+        token = data.get('token')
+        
+        if not email or not token:
+            return JsonResponse({'error': 'Email and token are required'}, status=400)
+        
+        try:
+            user = User.objects.get(email=email)
+        except User.DoesNotExist:
+            return JsonResponse({'error': 'User not found'}, status=404)
+        
+        # Deactivate FCM token
+        try:
+            fcm_token = FCMToken.objects.get(user=user, token=token)
+            fcm_token.is_active = False
+            fcm_token.save()
+            return JsonResponse({'message': 'FCM token unregistered successfully'}, status=200)
+        except FCMToken.DoesNotExist:
+            return JsonResponse({'error': 'FCM token not found'}, status=404)
+        
+    except Exception as e:
+        return JsonResponse({'error': str(e)}, status=500)
+
+
+@api_view(['GET'])
+@permission_classes([AllowAny])
+def get_user_notifications(request, email):
+    """
+    Get all notifications for a user
+    """
+    try:
+        user = User.objects.get(email=email)
+        notifications = Notification.objects.filter(user=user)
+        serializer = NotificationSerializer(notifications, many=True)
+        return Response(serializer.data, status=status.HTTP_200_OK)
+    except User.DoesNotExist:
+        return Response({'error': 'User not found'}, status=status.HTTP_404_NOT_FOUND)
+    except Exception as e:
+        return Response({'error': str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
+@api_view(['PATCH'])
+@permission_classes([AllowAny])
+def mark_notification_as_read(request, notification_id):
+    """
+    Mark a notification as read
+    """
+    try:
+        notification = Notification.objects.get(id=notification_id)
+        notification.is_read = True
+        notification.save()
+        serializer = NotificationSerializer(notification)
+        return Response(serializer.data, status=status.HTTP_200_OK)
+    except Notification.DoesNotExist:
+        return Response({'error': 'Notification not found'}, status=status.HTTP_404_NOT_FOUND)
+    except Exception as e:
+        return Response({'error': str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
+@api_view(['PATCH'])
+@permission_classes([AllowAny])
+def mark_all_notifications_as_read(request, email):
+    """
+    Mark all notifications for a user as read
+    """
+    try:
+        user = User.objects.get(email=email)
+        notifications = Notification.objects.filter(user=user, is_read=False)
+        notifications.update(is_read=True)
+        return Response({'message': f'Marked {notifications.count()} notifications as read'}, status=status.HTTP_200_OK)
+    except User.DoesNotExist:
+        return Response({'error': 'User not found'}, status=status.HTTP_404_NOT_FOUND)
+    except Exception as e:
+        return Response({'error': str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+

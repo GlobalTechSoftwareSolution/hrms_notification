@@ -21,9 +21,9 @@ from decouple import config
 SECRET_KEY = config('DJANGO_SECRET_KEY')
 
 # SECURITY WARNING: don't run with debug turned on in production!
-DEBUG = config('DJANGO_DEBUG', default='False').lower() in ['true', '1', 't']
+DEBUG = config('DJANGO_DEBUG', default='False').__str__().lower() in ['true', '1', 't']
 
-ALLOWED_HOSTS = [h for h in config('DJANGO_ALLOWED_HOSTS', default='*').split(',') if h]
+ALLOWED_HOSTS = [h for h in config('DJANGO_ALLOWED_HOSTS', default='*').__str__().split(',') if h]
 
 # Application definition
 
@@ -52,22 +52,13 @@ REST_FRAMEWORK = {
     'DEFAULT_AUTHENTICATION_CLASSES': [
         'rest_framework.authentication.SessionAuthentication',
         'rest_framework.authentication.BasicAuthentication',
-        'rest_framework_simplejwt.authentication.JWTAuthentication',
+    ],
+    'DEFAULT_PERMISSION_CLASSES': [
+        'rest_framework.permissions.AllowAny',
     ]
 }
 
-from datetime import timedelta
-
-SIMPLE_JWT = {
-    "USER_ID_FIELD": "email",        # use email as unique ID
-    "USER_ID_CLAIM": "user_id",      # this will show up in the JWT payload
-    "ACCESS_TOKEN_LIFETIME": timedelta(minutes=60),
-    "REFRESH_TOKEN_LIFETIME": timedelta(days=7),
-    "ROTATE_REFRESH_TOKENS": False,
-    "BLACKLIST_AFTER_ROTATION": True,
-    "ALGORITHM": "HS256",
-    "SIGNING_KEY": SECRET_KEY,
-}
+# JWT authentication removed as not used in this project
 
 MIDDLEWARE = [
     "corsheaders.middleware.CorsMiddleware",   # <-- move to top
@@ -83,7 +74,7 @@ MIDDLEWARE = [
 
 
 CORS_ALLOW_ALL_ORIGINS = False
-CORS_ALLOWED_ORIGINS = [o for o in config('CORS_ALLOWED_ORIGINS', default='').split(',') if o]
+CORS_ALLOWED_ORIGINS = [o for o in config('CORS_ALLOWED_ORIGINS', default='').__str__().split(',') if o]
 CORS_ALLOW_CREDENTIALS = True
 
 
@@ -94,7 +85,7 @@ CORS_ALLOW_HEADERS = [
 ]
 
 # CSRF trusted origins
-CSRF_TRUSTED_ORIGINS = [o for o in config('CSRF_TRUSTED_ORIGINS', default='').split(',') if o]
+CSRF_TRUSTED_ORIGINS = [o for o in config('CSRF_TRUSTED_ORIGINS', default='').__str__().split(',') if o]
 
 ROOT_URLCONF = 'hrms.urls'
 
@@ -176,7 +167,7 @@ DEFAULT_FROM_EMAIL = config('DEFAULT_FROM_EMAIL', default='')
 EMAIL_BACKEND = config('EMAIL_BACKEND', default='django.core.mail.backends.smtp.EmailBackend')
 EMAIL_HOST = config('EMAIL_HOST', default='')
 EMAIL_PORT = int(config('EMAIL_PORT', default=587))
-EMAIL_USE_TLS = config('EMAIL_USE_TLS', default='True').lower() in ['true','1','t']
+EMAIL_USE_TLS = config('EMAIL_USE_TLS', default='True').__str__().lower() in ['true','1','t']
 EMAIL_HOST_USER = config('EMAIL_HOST_USER', default='')
 EMAIL_HOST_PASSWORD = config('EMAIL_HOST_PASSWORD', default='')
 if not DEFAULT_FROM_EMAIL:
@@ -188,7 +179,7 @@ MINIO_STORAGE = {
     "ACCESS_KEY": config('MINIO_ACCESS_KEY'),
     "SECRET_KEY": config('MINIO_SECRET_KEY'),
     "BUCKET_NAME": config('MINIO_BUCKET_NAME'),
-    "USE_SSL": config('MINIO_USE_SSL', default='True').lower() in ['true','1','t'],
+    "USE_SSL": config('MINIO_USE_SSL', default='True').__str__().lower() in ['true','1','t'],
 }
 BASE_BUCKET_URL = config('BASE_BUCKET_URL')
 
@@ -198,3 +189,6 @@ LOGO_URL = config('LOGO_URL', default='')
 # Media files
 MEDIA_URL = config('MEDIA_URL', default='/media/')
 MEDIA_ROOT = os.path.join(BASE_DIR, 'media')
+
+# Firebase Configuration
+FIREBASE_SERVICE_ACCOUNT_KEY = config('FIREBASE_SERVICE_ACCOUNT_KEY', default='firebase-service-account.json')
