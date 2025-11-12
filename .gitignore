@@ -9,8 +9,9 @@ __pycache__/
 # Virtual environment
 venv/
 venv
-.env
-.env.*
+
+# Environment files
+.env.local
 
 # Django stuff:
 *.log
@@ -46,4 +47,3 @@ Desktop.ini
 
 # PyCharm
 *.iml
-hrms/firebase-service-account.json

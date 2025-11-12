@@ -10,8 +10,13 @@ logger = logging.getLogger(__name__)
 def initialize_firebase():
     try:
         if not firebase_admin._apps:
-            # Use the service account key file
-            cred = credentials.Certificate(settings.FIREBASE_SERVICE_ACCOUNT_KEY)
+            # Check if FIREBASE_SERVICE_ACCOUNT_KEY is a dict (JSON) or string (file path)
+            if isinstance(settings.FIREBASE_SERVICE_ACCOUNT_KEY, dict):
+                # Use JSON credentials directly
+                cred = credentials.Certificate(settings.FIREBASE_SERVICE_ACCOUNT_KEY)
+            else:
+                # Use the service account key file
+                cred = credentials.Certificate(settings.FIREBASE_SERVICE_ACCOUNT_KEY)
             firebase_admin.initialize_app(cred)
             logger.info("Firebase Admin SDK initialized successfully")
     except Exception as e:

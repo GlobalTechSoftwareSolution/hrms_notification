@@ -165,6 +165,18 @@ The system includes comprehensive email templates for all major events:
 - `GET /api/accounts/list_releaved/` - List resigned employees
 - `GET /api/accounts/get_releaved/<id>/` - Get resigned employee details
 
+## 🔒 Security Best Practices
+
+### Environment Variables
+All sensitive configuration should be stored in environment variables and **never committed to version control**. Use the `.env.template` file as a reference for required variables.
+
+### Sensitive Files
+- `.env` - Contains all secrets and should be in `.gitignore`
+- `firebase-service-account.json` - Firebase credentials should be stored securely
+
+### Production Deployment
+For production, store sensitive files outside the project directory and reference them with absolute paths.
+
 ## 🚀 Deployment
 
 ### Prerequisites
@@ -198,6 +210,15 @@ FRONTEND_URL=https://your-frontend-domain
 LOGO_URL=https://your-logo-url
 
 # MinIO
+MINIO_ENDPOINT=your-minio-endpoint
+MINIO_ACCESS_KEY=your-access-key
+MINIO_SECRET_KEY=your-secret-key
+MINIO_BUCKET_NAME=your-bucket-name
+MINIO_USE_SSL=True
+BASE_BUCKET_URL=your-base-bucket-url
+
+# Firebase
+FIREBASE_SERVICE_ACCOUNT_KEY=/path/to/secure/firebase-service-account.json
 MINIO_ENDPOINT=minio.yourdomain.com:9000
 MINIO_ACCESS_KEY=your-access-key
 MINIO_SECRET_KEY=your-secret-key

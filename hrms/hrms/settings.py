@@ -189,6 +189,9 @@ LOGO_URL = config('LOGO_URL', default='')
 # Media files
 MEDIA_URL = config('MEDIA_URL', default='/media/')
 MEDIA_ROOT = os.path.join(BASE_DIR, 'media')
-
-# Firebase Configuration
+import json
 FIREBASE_SERVICE_ACCOUNT_KEY = config('FIREBASE_SERVICE_ACCOUNT_KEY', default='firebase-service-account.json')
+
+# If the FIREBASE_SERVICE_ACCOUNT_KEY is a JSON string, parse it
+if isinstance(FIREBASE_SERVICE_ACCOUNT_KEY, str) and FIREBASE_SERVICE_ACCOUNT_KEY.startswith('{') and FIREBASE_SERVICE_ACCOUNT_KEY.endswith('}'):
+    FIREBASE_SERVICE_ACCOUNT_KEY = json.loads(FIREBASE_SERVICE_ACCOUNT_KEY)
