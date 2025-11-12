@@ -71,7 +71,7 @@ BEGIN
     DELETE FROM accounts_employee WHERE email_id = OLD.email;
     DELETE FROM accounts_admin WHERE email_id = OLD.email;
     DELETE FROM accounts_employeedetails WHERE email_id = OLD.email;
-  END IF;
+  END IF; 
 
   RETURN NEW;
 END;
