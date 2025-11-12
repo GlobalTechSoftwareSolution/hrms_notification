@@ -190,8 +190,12 @@ LOGO_URL = config('LOGO_URL', default='')
 MEDIA_URL = config('MEDIA_URL', default='/media/')
 MEDIA_ROOT = os.path.join(BASE_DIR, 'media')
 import json
-FIREBASE_SERVICE_ACCOUNT_KEY = config('FIREBASE_SERVICE_ACCOUNT_KEY', default='firebase-service-account.json')
+FIREBASE_SERVICE_ACCOUNT_KEY = config('FIREBASE_SERVICE_ACCOUNT_KEY', default='')
 
 # If the FIREBASE_SERVICE_ACCOUNT_KEY is a JSON string, parse it
 if isinstance(FIREBASE_SERVICE_ACCOUNT_KEY, str) and FIREBASE_SERVICE_ACCOUNT_KEY.startswith('{') and FIREBASE_SERVICE_ACCOUNT_KEY.endswith('}'):
-    FIREBASE_SERVICE_ACCOUNT_KEY = json.loads(FIREBASE_SERVICE_ACCOUNT_KEY)
+    try:
+        FIREBASE_SERVICE_ACCOUNT_KEY = json.loads(FIREBASE_SERVICE_ACCOUNT_KEY)
+    except json.JSONDecodeError:
+        # If JSON parsing fails, leave as string (might be a file path)
+        pass

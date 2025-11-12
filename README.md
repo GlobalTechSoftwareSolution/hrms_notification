@@ -174,6 +174,8 @@ All sensitive configuration should be stored in environment variables and **neve
 - `.env` - Contains all secrets and should be in `.gitignore`
 - `firebase-service-account.json` - Firebase credentials should be stored securely
 
+For proper Firebase configuration, see [FIREBASE_CREDENTIALS_TEMPLATE.md](hrms/FIREBASE_CREDENTIALS_TEMPLATE.md)
+
 ### Production Deployment
 For production, store sensitive files outside the project directory and reference them with absolute paths.
 

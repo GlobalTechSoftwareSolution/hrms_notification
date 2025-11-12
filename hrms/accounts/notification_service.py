@@ -10,6 +10,11 @@ logger = logging.getLogger(__name__)
 def initialize_firebase():
     try:
         if not firebase_admin._apps:
+            # Check if FIREBASE_SERVICE_ACCOUNT_KEY is provided
+            if not settings.FIREBASE_SERVICE_ACCOUNT_KEY:
+                logger.warning("Firebase service account key not configured. Firebase notifications will be disabled.")
+                return False
+                
             # Check if FIREBASE_SERVICE_ACCOUNT_KEY is a dict (JSON) or string (file path)
             if isinstance(settings.FIREBASE_SERVICE_ACCOUNT_KEY, dict):
                 # Use JSON credentials directly
@@ -19,8 +24,11 @@ def initialize_firebase():
                 cred = credentials.Certificate(settings.FIREBASE_SERVICE_ACCOUNT_KEY)
             firebase_admin.initialize_app(cred)
             logger.info("Firebase Admin SDK initialized successfully")
+            return True
     except Exception as e:
         logger.error(f"Failed to initialize Firebase Admin SDK: {str(e)}")
+        return False
+    return False
 
 def send_fcm_notification(user_email, title, body, data=None):
     """
@@ -28,7 +36,9 @@ def send_fcm_notification(user_email, title, body, data=None):
     """
     try:
         # Initialize Firebase if not already done
-        initialize_firebase()
+        if not initialize_firebase():
+            logger.info("Firebase not configured. Skipping notification.")
+            return False
         
         # Get active FCM tokens for the user
         user = User.objects.get(email=user_email)
