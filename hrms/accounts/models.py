@@ -536,6 +536,12 @@ class AbsentEmployeeDetails(models.Model):
             except Exception:
                 # Just in case Employee object doesn't exist
                 pass
+        
+        # Call the parent save method to actually save to database
+        super().save(*args, **kwargs)
+
+    def __str__(self):
+        return f"{self.fullname or self.email} - {self.date}"
 
 
 class RaiseRequestAttendance(models.Model):
