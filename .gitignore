@@ -43,7 +43,3 @@ Desktop.ini
 
 # PyCharm
 *.iml
-
-hrms_backend/hrms/firebase_service_account.json
-firebase_service_account.json
-hrms/firebase_service_account.json:1
