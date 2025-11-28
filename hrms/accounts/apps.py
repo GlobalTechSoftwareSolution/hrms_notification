@@ -1,27 +1,20 @@
 from django.apps import AppConfig
+from django.conf import settings
 import logging
 
 logger = logging.getLogger(__name__)
 
-
 class AccountsConfig(AppConfig):
-    default_auto_field: str = 'django.db.models.BigAutoField'
+    default_auto_field = 'django.db.models.BigAutoField'
     name = 'accounts'
 
     def ready(self):
-        """
-        Django app ready hook - runs when the app is loaded.
-        Start the APScheduler here for automatic tasks.
-        """
-        # Import signals
-        import accounts.signals
+        # Import and start scheduler only when Django is fully loaded
+        from .scheduler import start_scheduler
         
-        # Start the scheduler (only in production/runserver, not in migrations)
-        import sys
-        if 'runserver' in sys.argv or 'gunicorn' in sys.argv[0]:
-            try:
-                from accounts.scheduler import start_scheduler
-                start_scheduler()
-                logger.info("✅ Attendance scheduler initialized successfully")
-            except Exception as e:
-                logger.error(f"❌ Failed to start scheduler: {str(e)}")
+        # Only start scheduler in the main process, not in subprocesses
+        import os
+        if os.environ.get('RUN_MAIN') == 'true':
+            start_scheduler()
+            # Use plain text instead of emojis to avoid encoding issues
+            logger.info("Attendance scheduler initialized successfully")

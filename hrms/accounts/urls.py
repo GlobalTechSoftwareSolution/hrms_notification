@@ -18,6 +18,7 @@ from accounts.views import (
     HolidayViewSet, list_absent_employees, CareerViewSet, AppliedJobViewSet, 
     transfer_to_releaved, approve_releaved, list_releaved_employees, get_releaved_employee, create_pettycash, 
     list_pettycash, get_pettycash, update_pettycash, delete_pettycash,
+    register_fcm_token, unregister_fcm_token, send_notification_to_user, send_notification_to_topic,
 )
 
 urlpatterns = [
@@ -139,4 +140,9 @@ urlpatterns = [
     path('update_pettycash/<int:id>/', update_pettycash, name='update_pettycash'),
     path('delete_pettycash/<int:id>/', delete_pettycash, name='delete_pettycash'),
     
+    # FCM URLs
+    path('fcm/register/', register_fcm_token, name='fcm-register'),
+    path('fcm/unregister/', unregister_fcm_token, name='fcm-unregister'),
+    path('fcm/send_to_user/', send_notification_to_user, name='fcm-send-to-user'),
+    path('fcm/send_to_topic/', send_notification_to_topic, name='fcm-send-to-topic'),
 ]

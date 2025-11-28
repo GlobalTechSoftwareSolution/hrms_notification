@@ -741,3 +741,24 @@ class PettyCash(models.Model):
 
     def __str__(self):
         return f"PettyCash #{self.id} - {self.fullname or self.email.email} ({self.amount})"
+
+
+class FCMToken(models.Model):
+    """
+    Model to store FCM tokens for push notifications
+    """
+    id = models.AutoField(primary_key=True)
+    email = models.ForeignKey(User, on_delete=models.CASCADE, to_field='email')
+    token = models.TextField()
+    device_type = models.CharField(max_length=10, choices=[('android', 'Android'), ('ios', 'iOS')])
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+    
+    class Meta:
+        unique_together = ('email', 'device_type')
+        verbose_name = "FCM Token"
+        verbose_name_plural = "FCM Tokens"
+        ordering = ['-created_at']
+    
+    def __str__(self):
+        return f"FCM Token for {self.email.email} ({self.device_type})"

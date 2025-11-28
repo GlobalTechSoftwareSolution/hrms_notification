@@ -3526,8 +3526,31 @@ def get_releaved_employee(request, pk):
 from rest_framework.decorators import api_view
 from rest_framework.response import Response
 from rest_framework import status
-from .models import PettyCash
-from .serializers import PettyCashSerializer
+from .models import PettyCash, FCMToken
+from .serializers import PettyCashSerializer, FCMTokenSerializer
+
+# Initialize Firebase Admin SDK
+import firebase_admin
+from firebase_admin import messaging
+from django.conf import settings
+import os
+
+# Check if Firebase app is already initialized
+if not firebase_admin._apps:
+    # Path to your Firebase service account key file
+    # Make sure to set this path in your environment variables or settings
+    firebase_credentials_path = getattr(settings, 'FIREBASE_CREDENTIALS_PATH', None)
+    
+    if firebase_credentials_path and os.path.exists(firebase_credentials_path):
+        cred = firebase_admin.credentials.Certificate(firebase_credentials_path)
+        firebase_admin.initialize_app(cred)
+    else:
+        print("Firebase credentials not found. Push notifications will not work.")
+        # Initialize with default app for development
+        try:
+            firebase_admin.initialize_app()
+        except Exception as e:
+            print(f"Firebase initialization error: {e}")
 
 
 @api_view(['GET'])
@@ -3585,3 +3608,212 @@ def delete_pettycash(request, id):
     
     record.delete()
     return Response({'message': 'Petty cash record deleted successfully.'}, status=status.HTTP_204_NO_CONTENT)
+
+
+# FCM Views
+@api_view(['POST'])
+def register_fcm_token(request):
+    """
+    Register or update FCM token for a user
+    Expected data: { "email": "user@example.com", "token": "fcm_token", "device_type": "android" }
+    """
+    email = request.data.get('email')
+    token = request.data.get('token')
+    device_type = request.data.get('device_type', 'android')  # Default to android
+    
+    if not email or not token:
+        return Response(
+            {'error': 'Email and token are required'}, 
+            status=status.HTTP_400_BAD_REQUEST
+        )
+    
+    try:
+        user = User.objects.get(email=email)
+    except User.DoesNotExist:
+        return Response(
+            {'error': 'User not found'}, 
+            status=status.HTTP_404_NOT_FOUND
+        )
+    
+    # Create or update FCM token
+    fcm_token, created = FCMToken.objects.update_or_create(
+        email=user,
+        device_type=device_type,
+        defaults={'token': token}
+    )
+    
+    serializer = FCMTokenSerializer(fcm_token)
+    if created:
+        message = 'FCM token registered successfully'
+    else:
+        message = 'FCM token updated successfully'
+    
+    return Response({
+        'message': message,
+        'fcm_token': serializer.data
+    }, status=status.HTTP_201_CREATED if created else status.HTTP_200_OK)
+
+
+@api_view(['POST'])
+def unregister_fcm_token(request):
+    """
+    Remove FCM token for a user (logout scenario)
+    Expected data: { "email": "user@example.com", "device_type": "android" }
+    """
+    email = request.data.get('email')
+    device_type = request.data.get('device_type', 'android')  # Default to android
+    
+    if not email:
+        return Response(
+            {'error': 'Email is required'}, 
+            status=status.HTTP_400_BAD_REQUEST
+        )
+    
+    try:
+        user = User.objects.get(email=email)
+    except User.DoesNotExist:
+        return Response(
+            {'error': 'User not found'}, 
+            status=status.HTTP_404_NOT_FOUND
+        )
+    
+    try:
+        fcm_token = FCMToken.objects.get(email=user, device_type=device_type)
+        fcm_token.delete()
+        return Response(
+            {'message': 'FCM token unregistered successfully'}, 
+            status=status.HTTP_200_OK
+        )
+    except FCMToken.DoesNotExist:
+        return Response(
+            {'message': 'FCM token not found'}, 
+            status=status.HTTP_404_NOT_FOUND
+        )
+
+
+@api_view(['POST'])
+def send_notification_to_user(request):
+    """
+    Send push notification to a specific user
+    Expected data: { 
+        "email": "user@example.com", 
+        "title": "Notification Title",
+        "body": "Notification Body",
+        "data": { "key": "value" }  # Optional custom data
+    }
+    """
+    email = request.data.get('email')
+    title = request.data.get('title')
+    body = request.data.get('body')
+    data = request.data.get('data', {})
+    
+    if not email or not title or not body:
+        return Response(
+            {'error': 'Email, title, and body are required'}, 
+            status=status.HTTP_400_BAD_REQUEST
+        )
+    
+    try:
+        user = User.objects.get(email=email)
+    except User.DoesNotExist:
+        return Response(
+            {'error': 'User not found'}, 
+            status=status.HTTP_404_NOT_FOUND
+        )
+    
+    # Get all FCM tokens for this user
+    fcm_tokens = FCMToken.objects.filter(email=user)
+    
+    if not fcm_tokens.exists():
+        return Response(
+            {'error': 'No FCM tokens found for this user'}, 
+            status=status.HTTP_404_NOT_FOUND
+        )
+    
+    # Send notification to each token
+    success_count = 0
+    failure_count = 0
+    
+    for fcm_token in fcm_tokens:
+        try:
+            # Create a message
+            message = messaging.Message(
+                notification=messaging.Notification(
+                    title=title,
+                    body=body,
+                ),
+                data=data,
+                token=fcm_token.token,
+            )
+            
+            # Send the message
+            response = messaging.send(message)
+            print(f"Successfully sent message: {response}")
+            success_count += 1
+            
+        except messaging.UnregisteredError:
+            # Token is no longer valid, remove it
+            fcm_token.delete()
+            failure_count += 1
+            print(f"Unregistered token removed: {fcm_token.token}")
+            
+        except Exception as e:
+            failure_count += 1
+            print(f"Error sending message to {fcm_token.token}: {e}")
+    
+    return Response({
+        'message': f'Notifications sent: {success_count} successful, {failure_count} failed',
+        'success_count': success_count,
+        'failure_count': failure_count
+    }, status=status.HTTP_200_OK)
+
+
+@api_view(['POST'])
+def send_notification_to_topic(request):
+    """
+    Send push notification to a topic
+    Expected data: { 
+        "topic": "news", 
+        "title": "Notification Title",
+        "body": "Notification Body",
+        "data": { "key": "value" }  # Optional custom data
+    }
+    """
+    topic = request.data.get('topic')
+    title = request.data.get('title')
+    body = request.data.get('body')
+    data = request.data.get('data', {})
+    
+    if not topic or not title or not body:
+        return Response(
+            {'error': 'Topic, title, and body are required'}, 
+            status=status.HTTP_400_BAD_REQUEST
+        )
+    
+    try:
+        # Create a message
+        message = messaging.Message(
+            notification=messaging.Notification(
+                title=title,
+                body=body,
+            ),
+            data=data,
+            topic=topic,
+        )
+        
+        # Send the message
+        response = messaging.send(message)
+        print(f"Successfully sent message to topic {topic}: {response}")
+        
+        return Response({
+            'message': f'Notification sent to topic {topic}',
+            'response': response
+        }, status=status.HTTP_200_OK)
+        
+    except Exception as e:
+        print(f"Error sending message to topic {topic}: {e}")
+        return Response(
+            {'error': f'Failed to send notification to topic {topic}: {str(e)}'}, 
+            status=status.HTTP_500_INTERNAL_SERVER_ERROR
+        )
+

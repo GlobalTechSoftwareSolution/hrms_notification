@@ -235,3 +235,6 @@ LOGGING = {
         },
     },
 }
+
+# Firebase Configuration
+FIREBASE_CREDENTIALS_PATH = config('FIREBASE_CREDENTIALS_PATH', default='')
